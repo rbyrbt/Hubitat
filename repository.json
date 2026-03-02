@@ -1,0 +1,24 @@
+{
+  "author": "rbyrbt",
+  "gitHubUrl": "https://github.com/rbyrbt",
+  "packages": [
+    {
+      "name": "Lennox iComfort",
+      "category": "Integrations",
+      "location": "https://raw.githubusercontent.com/rbyrbt/hubitat-lennox-icomfort/main/packageManifest.json",
+      "description": "Manage Lennox iComfort S30/E30/S40/M30 thermostats"
+    },
+    {
+      "name": "PetSafe Smart Feeder",
+      "category": "Convenience",
+      "location": "https://raw.githubusercontent.com/rbyrbt/hubitat-petsafe-feeder/main/packageManifest.json",
+      "description": "Manage PetSafe Smart Feed devices"
+    },
+    {
+      "name": "Winix Air Purifiers",
+      "category": "Convenience",
+      "location": "https://raw.githubusercontent.com/rbyrbt/hubitat-winix-purifiers/main/packageManifest.json",
+      "description": "Connect and control Winix air purifiers"
+    }
+  ]
+}
