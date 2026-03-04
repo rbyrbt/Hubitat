@@ -10,13 +10,13 @@
     },
     {
       "name": "PetSafe Smart Feeder",
-      "category": "Convenience",
+      "category": "Integrations",
       "location": "https://raw.githubusercontent.com/rbyrbt/hubitat-petsafe-feeder/main/packageManifest.json",
       "description": "Manage PetSafe Smart Feed devices"
     },
     {
       "name": "Winix Air Purifiers",
-      "category": "Convenience",
+      "category": "Integrations",
       "location": "https://raw.githubusercontent.com/rbyrbt/hubitat-winix-purifiers/main/packageManifest.json",
       "description": "Connect and control Winix air purifiers"
     }
