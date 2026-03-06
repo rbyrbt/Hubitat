@@ -6,19 +6,22 @@
       "name": "Lennox iComfort",
       "category": "Integrations",
       "location": "https://raw.githubusercontent.com/rbyrbt/hubitat-lennox-icomfort/main/packageManifest.json",
-      "description": "Manage Lennox iComfort S30/E30/S40/M30 thermostats"
+      "description": "Manage Lennox iComfort S30/E30/S40/M30 thermostats",
+      "tags": [ "Climate Control","Temperature & Humidity","Cloud","LAN" ]
     },
     {
       "name": "PetSafe Smart Feeder",
       "category": "Integrations",
       "location": "https://raw.githubusercontent.com/rbyrbt/hubitat-petsafe-feeder/main/packageManifest.json",
-      "description": "Manage PetSafe Smart Feed devices"
+      "description": "Manage PetSafe Smart Feed devices",
+      "tags": [ "Pets & Animals","Cloud" ]
     },
     {
       "name": "Winix Air Purifiers",
       "category": "Integrations",
       "location": "https://raw.githubusercontent.com/rbyrbt/hubitat-winix-purifiers/main/packageManifest.json",
-      "description": "Connect and control Winix air purifiers"
+      "description": "Connect and control Winix air purifiers",
+      "tags": [ "Climate Control","Temperature & Humidity","Cloud" ]
     }
   ]
 }
