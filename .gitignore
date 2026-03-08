@@ -9,3 +9,12 @@ Thumbs.db
 *.swp
 *.swo
 .vscode/
+
+# Environment / secrets (do not commit)
+.env
+.env.local
+.env.*.local
+*.pem
+
+# Nested repos (safety: ignore if someone runs git init in a package folder)
+*/.git/

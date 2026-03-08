@@ -1,0 +1,51 @@
+{
+  "packageName": "Lennox iComfort",
+  "author": "rbyrbt",
+  "version": "1.1",
+  "minimumHEVersion": "2.1.9",
+  "dateReleased": "2026-03-07",
+  "documentationLink": "https://github.com/rbyrbt/Hubitat/blob/main/LennoxiComfort/README.md",
+  "payPalUrl": "https://ko-fi.com/rbyrbt",
+  "releaseNotes": "Polling defaults (1 min cloud / 30 s local), faster discovery polling, optimistic UI updates for zone and switch commands, local API 400 fix, zone setpoint sync from Lennox app.",
+  "tags": [ "Climate Control", "Temperature & Humidity", "Cloud", "LAN" ],
+  "apps": [
+    {
+      "id": "b6387a25-caac-42e0-9569-90b4d7f425cd",
+      "name": "Lennox iComfort Manager",
+      "namespace": "rbyrbt",
+      "location": "https://raw.githubusercontent.com/rbyrbt/Hubitat/main/LennoxiComfort/apps/lennox-icomfort-app.groovy",
+      "required": true,
+      "oauth": false
+    }
+  ],
+  "drivers": [
+    {
+      "id": "7c73b822-a333-4789-b13c-c837ac5db42f",
+      "name": "Lennox iComfort Driver",
+      "namespace": "rbyrbt",
+      "location": "https://raw.githubusercontent.com/rbyrbt/Hubitat/main/LennoxiComfort/drivers/lennox-icomfort-driver.groovy",
+      "required": true
+    },
+    {
+      "id": "5a780f7c-077f-4ee7-bf29-aac2fec7521f",
+      "name": "Lennox iComfort Child Zone Thermostat",
+      "namespace": "rbyrbt",
+      "location": "https://raw.githubusercontent.com/rbyrbt/Hubitat/main/LennoxiComfort/drivers/lennox-icomfort-child-zone-thermostat.groovy",
+      "required": true
+    },
+    {
+      "id": "d1053055-9222-47e4-98cf-3e6db317526d",
+      "name": "Lennox iComfort Child Switch",
+      "namespace": "rbyrbt",
+      "location": "https://raw.githubusercontent.com/rbyrbt/Hubitat/main/LennoxiComfort/drivers/lennox-icomfort-child-switch.groovy",
+      "required": true
+    },
+    {
+      "id": "4547326a-b7e8-428c-90ff-721e6a55b7b1",
+      "name": "Lennox iComfort Child Sensor",
+      "namespace": "rbyrbt",
+      "location": "https://raw.githubusercontent.com/rbyrbt/Hubitat/main/LennoxiComfort/drivers/lennox-icomfort-child-sensor.groovy",
+      "required": true
+    }
+  ]
+}
