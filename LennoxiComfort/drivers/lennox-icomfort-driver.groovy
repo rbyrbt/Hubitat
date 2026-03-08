@@ -910,7 +910,23 @@ void triggerFastPoll() {
 }
 
 // Message processing
+@Field static final Integer MAX_PROCESSED_MESSAGE_IDS = 200
+
 void processMessage(Map message) {
+    // Skip duplicate messages (same MessageID) to avoid redundant work and slowness
+    String messageId = message.MessageID ?: message.MessageId
+    if (messageId) {
+        if (!state.processedMessageIds) state.processedMessageIds = []
+        if (state.processedMessageIds.contains(messageId)) {
+            if (logEnable) log.debug "Skipping duplicate message: ${messageId.take(8)}..."
+            return
+        }
+        state.processedMessageIds << messageId
+        if (state.processedMessageIds.size() > MAX_PROCESSED_MESSAGE_IDS) {
+            state.processedMessageIds = state.processedMessageIds.drop(state.processedMessageIds.size() - MAX_PROCESSED_MESSAGE_IDS)
+        }
+    }
+
     String sysId = message.SenderID ?: message.SenderId
     
     if (sysId && sysId != state.appId && !state.sysId) {
