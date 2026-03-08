@@ -6,9 +6,9 @@ Single repository for [Hubitat Package Manager](https://hubitatpackagemanager.hu
 
 | Package | Info | Description |
 |---------|--------|-------------|
-| Lennox iComfort | [README.md](LennoxiComfort/README.md) | Manage Lennox iComfort S30/E30/S40/M30 thermostats |
-| PetSafe Smart Feeder | [README.md](PetSafeSmartFeeder/README.md) | Manage PetSafe Smart Feed devices |
-| Winix Air Purifiers | [README.md](WinixAirPurifiers/README.md) | Connect and control Winix air purifiers |
+| [Lennox iComfort](LennoxiComfort/) | [README.md](LennoxiComfort/README.md) | Manage Lennox iComfort S30/E30/S40/M30 thermostats |
+| [PetSafe Smart Feeder](PetSafeSmartFeeder/) | [README.md](PetSafeSmartFeeder/README.md) | Manage PetSafe Smart Feed devices |
+| [Winix Air Purifiers](WinixAirPurifiers/) | [README.md](WinixAirPurifiers/README.md) | Connect and control Winix air purifiers |
 
 ## Adding this repository in HPM
 
