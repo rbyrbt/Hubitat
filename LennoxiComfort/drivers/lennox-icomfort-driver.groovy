@@ -111,7 +111,8 @@ metadata {
         input name: "appId", type: "string", title: "Application ID", description: "Leave blank for default", required: false
         if (settings?.connectionType == "local") {
             input name: "pollInterval", type: "enum", title: "Poll Interval (Local)",
-                  options: localPollOptions(), defaultValue: "30", required: true
+                  options: localPollOptions(), defaultValue: "30", required: true,
+                  description: "Seconds between Retrieve requests. 30s recommended. Very short intervals (e.g. 10s) can overwhelm the S30 and cause delayed or stale updates for 2–3 minutes; use 30s or higher if you see that."
         } else {
             input name: "pollInterval", type: "enum", title: "Poll Interval (Cloud)",
                   options: cloudPollOptions(), defaultValue: "60", required: true
@@ -122,7 +123,7 @@ metadata {
               description: "Number of fast polls after a command", defaultValue: 10, required: true
         if (settings?.connectionType == "local") {
             input name: "longPollTimeout", type: "number", title: "Long Poll Timeout (seconds)",
-                  description: "How long each Retrieve request waits for data (local only)", defaultValue: 15, required: true
+                  description: "How long each Retrieve request blocks on the thermostat (local only). Lower (e.g. 5) gives the S30 more time between connections and can improve responsiveness; default 15.", defaultValue: 15, required: true
         }
         input name: "createSensors", type: "bool", title: "Create Sensor Devices", defaultValue: true
         input name: "createSwitches", type: "bool", title: "Create Switch Devices", defaultValue: true
@@ -746,6 +747,13 @@ void messagePump() {
     String appId = state.appId ?: (state.isLocalConnection ? DEFAULT_LOCAL_APP_ID : DEFAULT_CLOUD_APP_ID)
     Integer timeout = settings.longPollTimeout ?: 15
     
+    if (state.isLocalConnection) {
+        // Cap long poll so we don't hold the connection longer than the gap between polls;
+        // otherwise the S30 can be overwhelmed and delay delivering updates for minutes.
+        Integer pollIntervalSec = (settings.pollInterval ?: "30").toInteger()
+        timeout = Math.min(timeout, pollIntervalSec)
+    }
+    
     String url
     Map params
     
@@ -803,13 +811,16 @@ void handleMessagePumpResponse(resp, data) {
             if (body) {
                 def json = new JsonSlurper().parseText(body)
                 if (json?.messages && json.messages.size() > 0) {
-                    json.messages.each { message ->
-                        processMessage(message)
+                    // Defer processing so we return quickly and schedule the next poll immediately.
+                    // Slow processing (system + LCC messages, child updates) was blocking the callback
+                    // and delaying the next Retrieve by minutes.
+                    List batch = json.messages
+                    if (state.pendingMessageBatch != null) {
+                        state.queuedMessageBatch = batch
+                    } else {
+                        state.pendingMessageBatch = batch
+                        runIn(0, "processPendingMessageBatch")
                     }
-                    state.messageCount = (state.messageCount ?: 0) + json.messages.size()
-                    sendEvent(name: "messageCount", value: state.messageCount)
-                    sendEvent(name: "lastMessageTime", value: new Date().format("yyyy-MM-dd HH:mm:ss"))
-                    autoCreateChildDevices()
                 }
             }
         } else if (resp.status == 204) {
@@ -837,6 +848,31 @@ void handleMessagePumpResponse(resp, data) {
     }
     
     scheduleNextPoll()
+}
+
+void processPendingMessageBatch() {
+    if (!state.connected) return
+    List batch = state.pendingMessageBatch
+    if (!batch) return
+    
+    try {
+        batch.each { message ->
+            processMessage(message)
+        }
+        state.messageCount = (state.messageCount ?: 0) + batch.size()
+        sendEvent(name: "messageCount", value: state.messageCount)
+        sendEvent(name: "lastMessageTime", value: new Date().format("yyyy-MM-dd HH:mm:ss"))
+        autoCreateChildDevices()
+    } catch (Exception e) {
+        log.error "Error processing message batch: ${e.message}"
+    }
+    
+    state.pendingMessageBatch = null
+    if (state.queuedMessageBatch != null) {
+        state.pendingMessageBatch = state.queuedMessageBatch
+        state.queuedMessageBatch = null
+        runIn(0, "processPendingMessageBatch")
+    }
 }
 
 void scheduleNextPoll() {
