@@ -737,9 +737,6 @@ void startMessagePump() {
         return
     }
     
-    // Clear so initial/subscription messages are never skipped as "duplicates"
-    state.processedMessageIds = null
-    
     log.info "Starting message pump..."
     messagePump()
 }
@@ -913,25 +910,7 @@ void triggerFastPoll() {
 }
 
 // Message processing
-@Field static final Integer MAX_PROCESSED_MESSAGE_IDS = 200
-// Only dedupe when ID looks unique (e.g. UUID). Local LCC often uses "0" or similar for many messages.
-@Field static final Integer MIN_MESSAGE_ID_LENGTH_TO_DEDUPE = 10
-
 void processMessage(Map message) {
-    // Skip duplicate messages (same MessageID) only when the ID is unique-looking (e.g. UUID)
-    String messageId = message.MessageID?.toString() ?: message.MessageId?.toString()
-    if (messageId && messageId.length() >= MIN_MESSAGE_ID_LENGTH_TO_DEDUPE) {
-        if (!state.processedMessageIds) state.processedMessageIds = []
-        if (state.processedMessageIds.contains(messageId)) {
-            if (logEnable) log.debug "Skipping duplicate message: ${messageId.take(8)}..."
-            return
-        }
-        state.processedMessageIds << messageId
-        if (state.processedMessageIds.size() > MAX_PROCESSED_MESSAGE_IDS) {
-            state.processedMessageIds = state.processedMessageIds.drop(state.processedMessageIds.size() - MAX_PROCESSED_MESSAGE_IDS)
-        }
-    }
-
     String sysId = message.SenderID ?: message.SenderId
     
     if (sysId && sysId != state.appId && !state.sysId) {
