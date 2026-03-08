@@ -1,4 +1,4 @@
-# rbyrbt Hubitat Packages
+# Hubitat Packages
 
 Single repository for [Hubitat Package Manager](https://hubitatpackagemanager.hubitatcommunity.com/) (HPM). All package code and manifests live in this repo.
 
