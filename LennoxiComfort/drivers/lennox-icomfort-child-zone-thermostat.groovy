@@ -132,19 +132,15 @@ void updateZoneState(Map zoneState, Boolean singleSetpointMode) {
         }
     }
     
-    // HVAC Mode
+    // HVAC Mode (always send when present so UI shows it)
     if (zoneState.systemMode) {
         String hubitatMode = HVAC_MODE_MAP[zoneState.systemMode] ?: zoneState.systemMode
-        if (device.currentValue("thermostatMode") != hubitatMode) {
-            sendEvent(name: "thermostatMode", value: hubitatMode, descriptionText: "${device.displayName} mode is ${hubitatMode}")
-        }
+        sendEvent(name: "thermostatMode", value: hubitatMode, descriptionText: "${device.displayName} mode is ${hubitatMode}")
     }
     
-    // Fan Mode
+    // Fan Mode (always send when present so UI shows it)
     if (zoneState.fanMode) {
-        if (device.currentValue("thermostatFanMode") != zoneState.fanMode) {
-            sendEvent(name: "thermostatFanMode", value: zoneState.fanMode, descriptionText: "${device.displayName} fan mode is ${zoneState.fanMode}")
-        }
+        sendEvent(name: "thermostatFanMode", value: zoneState.fanMode, descriptionText: "${device.displayName} fan mode is ${zoneState.fanMode}")
     }
     
     // Operating State
@@ -169,17 +165,14 @@ void updateZoneState(Map zoneState, Boolean singleSetpointMode) {
             sendEvent(name: "coolingSetpoint", value: sp, unit: getTemperatureScale())
         }
     } else {
+        // Always send setpoints when present so UI shows them (avoids type/scale comparison skips)
         if (zoneState.hsp != null) {
             def hsp = convertTemp(zoneState.hsp, zoneState.hspC)
-            if (!valuesEqualAsNumber(device.currentValue("heatingSetpoint"), hsp)) {
-                sendEvent(name: "heatingSetpoint", value: hsp, unit: getTemperatureScale(), descriptionText: "${device.displayName} heating setpoint is ${hsp}°${getTemperatureScale()}")
-            }
+            sendEvent(name: "heatingSetpoint", value: hsp, unit: getTemperatureScale(), descriptionText: "${device.displayName} heating setpoint is ${hsp}°${getTemperatureScale()}")
         }
         if (zoneState.csp != null) {
             def csp = convertTemp(zoneState.csp, zoneState.cspC)
-            if (!valuesEqualAsNumber(device.currentValue("coolingSetpoint"), csp)) {
-                sendEvent(name: "coolingSetpoint", value: csp, unit: getTemperatureScale(), descriptionText: "${device.displayName} cooling setpoint is ${csp}°${getTemperatureScale()}")
-            }
+            sendEvent(name: "coolingSetpoint", value: csp, unit: getTemperatureScale(), descriptionText: "${device.displayName} cooling setpoint is ${csp}°${getTemperatureScale()}")
         }
         // Set thermostatSetpoint based on current mode
         updateThermostatSetpoint()
