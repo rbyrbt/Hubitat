@@ -559,25 +559,35 @@ void negotiateCloud() {
     }
 }
 
-void subscribeCloud() {
+void subscribeCloud(Set<String> pathGroups) {
     log.info "Subscribing to cloud data..."
+    
+    String cloudPaths1, cloudPaths2
+    if (pathGroups == null) {
+        if (logEnable) log.debug "RequestData mode: discovery (full paths for initial setup)"
+        cloudPaths1 = "1;/zones;/occupancy;/schedules;/reminderSensors;/reminders;/alerts/active;"
+        cloudPaths2 = "1;/alerts/meta;/dealers;/devices;/equipments;/system;/fwm;/ocst;"
+    } else {
+        if (logEnable) log.debug "RequestData mode: dynamic | path groups: ${pathGroups.sort().join(', ')}"
+        cloudPaths1 = buildCloudPaths1(pathGroups)
+        cloudPaths2 = buildCloudPaths2(pathGroups)
+        if (logEnable) log.debug "RequestData cloud paths1: ${cloudPaths1}"
+        if (logEnable) log.debug "RequestData cloud paths2: ${cloudPaths2}"
+    }
+    state.cloudPaths2 = cloudPaths2
     
     state.systems?.each { system ->
         String sysId = system.sysId
-        
-        // First subscription request
-        cloudRequestData(sysId, "1;/zones;/occupancy;/schedules;/reminderSensors;/reminders;/alerts/active;")
-        
-        // Second subscription request (delayed)
+        cloudRequestData(sysId, cloudPaths1)
         runIn(2, "cloudRequestDataSecondary", [data: sysId])
     }
     
-    // Start message pump
     runIn(4, "startMessagePump")
 }
 
 void cloudRequestDataSecondary(String sysId) {
-    cloudRequestData(sysId, "1;/alerts/meta;/dealers;/devices;/equipments;/system;/fwm;/ocst;")
+    String paths2 = state.cloudPaths2 ?: "1;/alerts/meta;/dealers;/devices;/equipments;/system;/fwm;/ocst;"
+    cloudRequestData(sysId, paths2)
 }
 
 void cloudRequestData(String sysId, String jsonPaths) {
@@ -672,21 +682,69 @@ void subscribe() {
     }
     
     log.info "Subscribing to Lennox data..."
+    Set<String> pathGroups = getRequiredPathGroups()
     
     if (state.isLocalConnection) {
-        String paths1 = "1;/systemControl;/systemController;/reminderSensors;/reminders;/alerts/active;/alerts/meta;/bleProvisionDB;/ble;/indoorAirQuality;/fwm;/rgw;/devices;/zones;/equipments;/schedules;/occupancy;/system"
-        String paths2 = "1;/automatedTest;/zoneTestControl;/homes;/reminders;/algorithm;/historyReportFileDetails;/interfaces;/logs"
-        
+        String paths1, paths2
+        if (pathGroups == null) {
+            if (logEnable) log.debug "RequestData mode: discovery (full paths for initial setup)"
+            paths1 = "1;/systemControl;/systemController;/reminderSensors;/reminders;/alerts/active;/alerts/meta;/bleProvisionDB;/ble;/indoorAirQuality;/fwm;/rgw;/devices;/zones;/equipments;/schedules;/occupancy;/system"
+            paths2 = "1;/automatedTest;/zoneTestControl;/homes;/reminders;/algorithm;/historyReportFileDetails;/interfaces;/logs"
+        } else {
+            if (logEnable) log.debug "RequestData mode: dynamic | path groups: ${pathGroups.sort().join(', ')}"
+            paths1 = buildLocalPaths1(pathGroups)
+            paths2 = buildLocalPaths2(pathGroups)
+            if (logEnable) log.debug "RequestData paths1: ${paths1}"
+            if (logEnable) log.debug "RequestData paths2: ${paths2}"
+        }
         requestData(paths1)
         runIn(2, "requestDataSecondary", [data: paths2])
         runIn(3, "startMessagePump")
     } else {
-        subscribeCloud()
+        subscribeCloud(pathGroups)
     }
 }
 
 void requestDataSecondary(String paths) {
     requestData(paths)
+}
+
+void resubscribeForChildDevices() {
+    if (!state.connected) return
+    Set<String> pathGroups = getRequiredPathGroups()
+    if (state.isLocalConnection) {
+        String paths1, paths2
+        if (pathGroups == null) {
+            if (logEnable) log.debug "Re-subscribe RequestData mode: discovery"
+            paths1 = "1;/systemControl;/systemController;/reminderSensors;/reminders;/alerts/active;/alerts/meta;/bleProvisionDB;/ble;/indoorAirQuality;/fwm;/rgw;/devices;/zones;/equipments;/schedules;/occupancy;/system"
+            paths2 = "1;/automatedTest;/zoneTestControl;/homes;/reminders;/algorithm;/historyReportFileDetails;/interfaces;/logs"
+        } else {
+            if (logEnable) log.debug "Re-subscribe RequestData mode: dynamic | path groups: ${pathGroups.sort().join(', ')}"
+            paths1 = buildLocalPaths1(pathGroups)
+            paths2 = buildLocalPaths2(pathGroups)
+            if (logEnable) log.debug "Re-subscribe RequestData paths1: ${paths1} | paths2: ${paths2}"
+        }
+        requestData(paths1)
+        runIn(2, "requestDataSecondary", [data: paths2])
+    } else {
+        String cloudPaths1, cloudPaths2
+        if (pathGroups == null) {
+            if (logEnable) log.debug "Re-subscribe RequestData mode: discovery"
+            cloudPaths1 = "1;/zones;/occupancy;/schedules;/reminderSensors;/reminders;/alerts/active;"
+            cloudPaths2 = "1;/alerts/meta;/dealers;/devices;/equipments;/system;/fwm;/ocst;"
+        } else {
+            if (logEnable) log.debug "Re-subscribe RequestData mode: dynamic | path groups: ${pathGroups.sort().join(', ')}"
+            cloudPaths1 = buildCloudPaths1(pathGroups)
+            cloudPaths2 = buildCloudPaths2(pathGroups)
+            if (logEnable) log.debug "Re-subscribe RequestData cloud paths1: ${cloudPaths1} | paths2: ${cloudPaths2}"
+        }
+        state.cloudPaths2 = cloudPaths2
+        state.systems?.each { system ->
+            cloudRequestData(system.sysId, cloudPaths1)
+            runIn(2, "cloudRequestDataSecondary", [data: system.sysId])
+        }
+    }
+    if (logEnable) log.debug "Re-subscribed RequestData for current child devices"
 }
 
 void requestData(String jsonPaths) {
@@ -728,6 +786,76 @@ void requestData(String jsonPaths) {
     } catch (Exception e) {
         log.error "RequestData exception: ${e.message}"
     }
+}
+
+// Dynamic subscription: path groups required by installed child devices
+Set<String> getInstalledChildKeys() {
+    String baseDni = device.deviceNetworkId
+    String prefix = baseDni + "-"
+    Set<String> keys = [] as Set
+    getChildDevices()?.each { child ->
+        String dni = child.deviceNetworkId
+        if (dni?.startsWith(prefix)) {
+            String key = dni.substring(prefix.length())
+            if (key) keys << key
+        }
+    }
+    return keys
+}
+
+/** Returns required path groups (Set of names), or null when bootstrap (use full discovery paths). */
+Set<String> getRequiredPathGroups() {
+    if (!state.systemInitialized || !state.zones) return null
+    Set<String> keys = getInstalledChildKeys()
+    Set<String> groups = ["system", "zones", "schedules", "systemControl", "systemController", "devices", "reminderSensors", "reminders", "fwm"] as Set
+    if (keys.any { it.startsWith("switch-manualAway") || it.startsWith("switch-smartAwayEnable") || it == "sensor-homeState" }) groups << "occupancy"
+    if (keys.any { it == "sensor-activeAlerts" }) groups << "alerts"
+    boolean needEquipments = keys.any { it.startsWith("zone-") || it.startsWith("sensor-diag-") }
+    if (needEquipments) groups << "equipments"
+    if (keys.any { it == "sensor-iaqPm25" || it == "sensor-iaqVoc" || it == "sensor-iaqCo2" }) groups << "indoorAirQuality"
+    if (keys.any { it.startsWith("sensor-ble-") }) groups << "ble"
+    if (keys.any { it == "sensor-wifiRssi" }) groups << "interfaces"
+    if (keys.any { it == "sensor-internetStatus" || it == "sensor-relayStatus" }) groups << "rgw"
+    return groups
+}
+
+String buildLocalPaths1(Set<String> pathGroups) {
+    List<String> p = ["1"]
+    p << "systemControl" << "systemController" << "reminderSensors" << "reminders"
+    if (pathGroups.contains("alerts")) p << "alerts/active" << "alerts/meta"
+    if (pathGroups.contains("ble")) p << "bleProvisionDB" << "ble"
+    if (pathGroups.contains("indoorAirQuality")) p << "indoorAirQuality"
+    p << "fwm"
+    if (pathGroups.contains("rgw")) p << "rgw"
+    p << "devices" << "zones"
+    if (pathGroups.contains("equipments")) p << "equipments"
+    p << "schedules"
+    if (pathGroups.contains("occupancy")) p << "occupancy"
+    p << "system"
+    return p.collect { "/${it}" }.join(";") + ";"
+}
+
+String buildLocalPaths2(Set<String> pathGroups) {
+    List<String> p = ["1"]
+    if (pathGroups.contains("interfaces")) p << "interfaces"
+    if (p.size() == 1) p << "reminders"
+    return p.collect { "/${it}" }.join(";") + ";"
+}
+
+String buildCloudPaths1(Set<String> pathGroups) {
+    List<String> p = ["1", "zones", "schedules", "reminderSensors", "reminders"]
+    if (pathGroups.contains("occupancy")) p << "occupancy"
+    if (pathGroups.contains("alerts")) p << "alerts/active"
+    return p.collect { "/${it}" }.join(";") + ";"
+}
+
+String buildCloudPaths2(Set<String> pathGroups) {
+    List<String> p = ["1"]
+    if (pathGroups.contains("alerts")) p << "alerts/meta"
+    p << "dealers" << "devices"
+    if (pathGroups.contains("equipments")) p << "equipments"
+    p << "system" << "fwm" << "ocst"
+    return p.collect { "/${it}" }.join(";") + ";"
 }
 
 // Message pump - polls for messages
@@ -811,10 +939,9 @@ void handleMessagePumpResponse(resp, data) {
             if (body) {
                 def json = new JsonSlurper().parseText(body)
                 if (json?.messages && json.messages.size() > 0) {
-                    // Defer processing so we return quickly and schedule the next poll immediately.
-                    // Slow processing (system + LCC messages, child updates) was blocking the callback
-                    // and delaying the next Retrieve by minutes.
                     List batch = json.messages
+                    if (logEnable) log.debug "Retrieve: ${batch.size()} message(s), response size: ${body.size()} chars"
+                    // Defer processing so we return quickly and schedule the next poll immediately.
                     if (state.pendingMessageBatch != null) {
                         state.queuedMessageBatch = batch
                     } else {
@@ -856,6 +983,7 @@ void processPendingMessageBatch() {
     if (!batch) return
     
     try {
+        if (logEnable) log.debug "Processing batch: ${batch.size()} message(s)"
         batch.each { message ->
             processMessage(message)
         }
@@ -921,6 +1049,7 @@ void processMessage(Map message) {
     
     if (message.Data) {
         Map data = message.Data
+        if (logEnable) log.debug "Message Data keys: ${data.keySet().sort().join(', ')}"
         
         // Process system messages
         if (data.system) {
@@ -1849,6 +1978,7 @@ void createDeviceByKey(String key) {
     } else {
         log.warn "Unknown device key: ${key}"
     }
+    resubscribeForChildDevices()
 }
 
 void removeDeviceByKey(String key) {
@@ -1860,6 +1990,7 @@ void removeDeviceByKey(String key) {
     } else {
         log.warn "Device not found for removal: ${dni}"
     }
+    resubscribeForChildDevices()
 }
 
 // Commands for publishing to Lennox

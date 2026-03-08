@@ -113,108 +113,70 @@ void refresh() {
     parent?.refresh()
 }
 
+// Only send event when value changed to avoid "Too many events pending" when message pump floods updates
+private void sendEventIfChanged(String name, value, String unit = null, String descriptionText = null) {
+    def current = device.currentValue(name)
+    boolean same = (current == value) || (value != null && current != null && valuesEqualAsNumber(current, value))
+    if (same) return
+    Map evt = [name: name, value: value]
+    if (unit) evt.unit = unit
+    if (descriptionText) evt.descriptionText = descriptionText
+    sendEvent(evt)
+}
+
 // Called by parent to update zone state
 void updateZoneState(Map zoneState, Boolean singleSetpointMode) {
     if (logEnable) log.debug "Updating zone state: ${zoneState}"
     
-    // Temperature (use numeric comparison so string "74" vs number 74 doesn't skip update)
     if (zoneState.temperature != null) {
         def temp = convertTemp(zoneState.temperature, zoneState.temperatureC)
-        if (!valuesEqualAsNumber(device.currentValue("temperature"), temp)) {
-            sendEvent(name: "temperature", value: temp, unit: getTemperatureScale(), descriptionText: "${device.displayName} temperature is ${temp}°${getTemperatureScale()}")
-        }
+        sendEventIfChanged("temperature", temp, getTemperatureScale(), "${device.displayName} temperature is ${temp}°${getTemperatureScale()}")
     }
-    
-    // Humidity
     if (zoneState.humidity != null) {
-        if (!valuesEqualAsNumber(device.currentValue("humidity"), zoneState.humidity)) {
-            sendEvent(name: "humidity", value: zoneState.humidity, unit: "%", descriptionText: "${device.displayName} humidity is ${zoneState.humidity}%")
-        }
+        sendEventIfChanged("humidity", zoneState.humidity, "%", "${device.displayName} humidity is ${zoneState.humidity}%")
     }
-    
-    // HVAC Mode (always send when present so UI shows it)
     if (zoneState.systemMode) {
         String hubitatMode = HVAC_MODE_MAP[zoneState.systemMode] ?: zoneState.systemMode
-        sendEvent(name: "thermostatMode", value: hubitatMode, descriptionText: "${device.displayName} mode is ${hubitatMode}")
+        sendEventIfChanged("thermostatMode", hubitatMode, null, "${device.displayName} mode is ${hubitatMode}")
     }
-    
-    // Fan Mode (always send when present so UI shows it)
     if (zoneState.fanMode) {
-        sendEvent(name: "thermostatFanMode", value: zoneState.fanMode, descriptionText: "${device.displayName} fan mode is ${zoneState.fanMode}")
+        sendEventIfChanged("thermostatFanMode", zoneState.fanMode, null, "${device.displayName} fan mode is ${zoneState.fanMode}")
     }
-    
-    // Operating State
     if (zoneState.tempOperation) {
         String opState = OPERATING_STATE_MAP[zoneState.tempOperation] ?: "idle"
-        if (device.currentValue("thermostatOperatingState") != opState) {
-            sendEvent(name: "thermostatOperatingState", value: opState, descriptionText: "${device.displayName} is ${opState}")
-        }
+        sendEventIfChanged("thermostatOperatingState", opState, null, "${device.displayName} is ${opState}")
     }
-    
-    // Setpoints
     String spmValue = singleSetpointMode.toString()
-    if (device.currentValue("singleSetpointMode") != spmValue) {
-        sendEvent(name: "singleSetpointMode", value: spmValue)
-    }
-    
+    sendEventIfChanged("singleSetpointMode", spmValue)
     if (singleSetpointMode) {
         if (zoneState.sp != null) {
             def sp = convertTemp(zoneState.sp, zoneState.spC)
-            sendEvent(name: "thermostatSetpoint", value: sp, unit: getTemperatureScale())
-            sendEvent(name: "heatingSetpoint", value: sp, unit: getTemperatureScale())
-            sendEvent(name: "coolingSetpoint", value: sp, unit: getTemperatureScale())
+            String scale = getTemperatureScale()
+            sendEventIfChanged("thermostatSetpoint", sp, scale)
+            sendEventIfChanged("heatingSetpoint", sp, scale)
+            sendEventIfChanged("coolingSetpoint", sp, scale)
         }
     } else {
-        // Always send setpoints when present so UI shows them (avoids type/scale comparison skips)
         if (zoneState.hsp != null) {
             def hsp = convertTemp(zoneState.hsp, zoneState.hspC)
-            sendEvent(name: "heatingSetpoint", value: hsp, unit: getTemperatureScale(), descriptionText: "${device.displayName} heating setpoint is ${hsp}°${getTemperatureScale()}")
+            sendEventIfChanged("heatingSetpoint", hsp, getTemperatureScale(), "${device.displayName} heating setpoint is ${hsp}°${getTemperatureScale()}")
         }
         if (zoneState.csp != null) {
             def csp = convertTemp(zoneState.csp, zoneState.cspC)
-            sendEvent(name: "coolingSetpoint", value: csp, unit: getTemperatureScale(), descriptionText: "${device.displayName} cooling setpoint is ${csp}°${getTemperatureScale()}")
+            sendEventIfChanged("coolingSetpoint", csp, getTemperatureScale(), "${device.displayName} cooling setpoint is ${csp}°${getTemperatureScale()}")
         }
-        // Set thermostatSetpoint based on current mode
         updateThermostatSetpoint()
     }
-    
-    // Humidity Mode and Setpoints
-    if (zoneState.humidityMode) {
-        sendEvent(name: "humidityMode", value: zoneState.humidityMode)
-    }
-    if (zoneState.husp != null) {
-        sendEvent(name: "humidifySetpoint", value: zoneState.husp, unit: "%")
-    }
-    if (zoneState.desp != null) {
-        sendEvent(name: "dehumidifySetpoint", value: zoneState.desp, unit: "%")
-    }
-    if (zoneState.humOperation) {
-        sendEvent(name: "humidityOperation", value: zoneState.humOperation)
-    }
-    
-    // Additional attributes
-    if (zoneState.damper != null) {
-        sendEvent(name: "damper", value: zoneState.damper, unit: "%")
-    }
-    if (zoneState.demand != null) {
-        sendEvent(name: "demand", value: zoneState.demand)
-    }
-    if (zoneState.scheduleId != null) {
-        sendEvent(name: "scheduleId", value: zoneState.scheduleId)
-    }
-    if (zoneState.scheduleName) {
-        if (device.currentValue("scheduleName") != zoneState.scheduleName) {
-            sendEvent(name: "scheduleName", value: zoneState.scheduleName)
-        }
-    }
-    if (zoneState.allergenDefender != null) {
-        sendEvent(name: "allergenDefender", value: zoneState.allergenDefender.toString())
-    }
-    if (zoneState.ventilation != null) {
-        sendEvent(name: "ventilation", value: zoneState.ventilation.toString())
-    }
-    
-    // Update supported modes based on zone capabilities
+    if (zoneState.humidityMode) sendEventIfChanged("humidityMode", zoneState.humidityMode)
+    if (zoneState.husp != null) sendEventIfChanged("humidifySetpoint", zoneState.husp, "%")
+    if (zoneState.desp != null) sendEventIfChanged("dehumidifySetpoint", zoneState.desp, "%")
+    if (zoneState.humOperation) sendEventIfChanged("humidityOperation", zoneState.humOperation)
+    if (zoneState.damper != null) sendEventIfChanged("damper", zoneState.damper, "%")
+    if (zoneState.demand != null) sendEventIfChanged("demand", zoneState.demand)
+    if (zoneState.scheduleId != null) sendEventIfChanged("scheduleId", zoneState.scheduleId)
+    if (zoneState.scheduleName) sendEventIfChanged("scheduleName", zoneState.scheduleName)
+    if (zoneState.allergenDefender != null) sendEventIfChanged("allergenDefender", zoneState.allergenDefender.toString())
+    if (zoneState.ventilation != null) sendEventIfChanged("ventilation", zoneState.ventilation.toString())
     updateSupportedModes(zoneState)
     
     // Store min/max for validation
@@ -234,14 +196,14 @@ void updateSupportedModes(Map zoneState) {
     if (zoneState.coolingOption) modes.add("cool")
     if (zoneState.heatingOption && zoneState.coolingOption) modes.add("auto")
     if (zoneState.emergencyHeatingOption) modes.add("emergency heat")
-    
+    def current = device.currentValue("supportedThermostatModes")
+    if (current != null && current.toString() == modes.toString()) return
     sendEvent(name: "supportedThermostatModes", value: modes)
 }
 
 void updateThermostatSetpoint() {
     String mode = device.currentValue("thermostatMode")
     def setpoint = null
-    
     switch (mode) {
         case "heat":
         case "emergency heat":
@@ -251,15 +213,11 @@ void updateThermostatSetpoint() {
             setpoint = device.currentValue("coolingSetpoint")
             break
         case "auto":
-            // In auto mode, use the average or heating setpoint
-            def hsp = device.currentValue("heatingSetpoint")
-            def csp = device.currentValue("coolingSetpoint")
-            setpoint = hsp  // Or could use (hsp + csp) / 2
+            setpoint = device.currentValue("heatingSetpoint")
             break
     }
-    
     if (setpoint != null) {
-        sendEvent(name: "thermostatSetpoint", value: setpoint, unit: getTemperatureScale())
+        sendEventIfChanged("thermostatSetpoint", setpoint, getTemperatureScale())
     }
 }
 

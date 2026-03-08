@@ -236,29 +236,31 @@ void updateBle(String deviceName, String deviceModel, String commStatus, Map inp
 }
 
 void updateWeather(Map weatherData) {
-    if (weatherData.airQuality) {
+    if (weatherData.airQuality && device.currentValue("airQuality") != weatherData.airQuality) {
         sendEvent(name: "airQuality", value: weatherData.airQuality)
     }
-    if (weatherData.tree) {
+    if (weatherData.tree != null && device.currentValue("pollenTree") != weatherData.tree) {
         sendEvent(name: "pollenTree", value: weatherData.tree)
     }
-    if (weatherData.weed) {
+    if (weatherData.weed != null && device.currentValue("pollenWeed") != weatherData.weed) {
         sendEvent(name: "pollenWeed", value: weatherData.weed)
     }
-    if (weatherData.grass) {
+    if (weatherData.grass != null && device.currentValue("pollenGrass") != weatherData.grass) {
         sendEvent(name: "pollenGrass", value: weatherData.grass)
     }
-    if (weatherData.mold) {
+    if (weatherData.mold != null && device.currentValue("moldLevel") != weatherData.mold) {
         sendEvent(name: "moldLevel", value: weatherData.mold)
     }
-    if (weatherData.uvIndex) {
+    if (weatherData.uvIndex != null && device.currentValue("uvIndex") != weatherData.uvIndex) {
         sendEvent(name: "uvIndex", value: weatherData.uvIndex)
     }
     if (weatherData.humidity != null) {
         updateHumidity(weatherData.humidity.toInteger())
     }
-    
-    sendEvent(name: "sensorValue", value: weatherData.airQuality ?: "Unknown")
+    String sv = weatherData.airQuality ?: "Unknown"
+    if (device.currentValue("sensorValue") != sv) {
+        sendEvent(name: "sensorValue", value: sv)
+    }
 }
 
 void updateDiagnostic(String name, String value, String unit) {
