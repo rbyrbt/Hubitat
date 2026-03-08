@@ -737,6 +737,9 @@ void startMessagePump() {
         return
     }
     
+    // Clear so initial/subscription messages are never skipped as "duplicates"
+    state.processedMessageIds = null
+    
     log.info "Starting message pump..."
     messagePump()
 }
