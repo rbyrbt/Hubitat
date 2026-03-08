@@ -624,7 +624,7 @@ void cloudRequestData(String sysId, String jsonPaths) {
 }
 
 String getClientId() {
-    String appId = state.appId ?: (state.isLocalConnection ? DEFAULT_LOCAL_APP_ID : DEFAULT_CLOUD_APP_ID)
+    String appId = state.appId ?: DEFAULT_CLOUD_APP_ID
     if (state.isLocalConnection) {
         return appId
     }
@@ -1833,6 +1833,7 @@ void publishMessage(Map data, String additionalParameters = null) {
     }
     
     String sysId = state.sysId ?: "LCC"
+    state.publishMessageId = (state.publishMessageId ?: 0) + 1
     
     String url
     Map params
@@ -1840,7 +1841,7 @@ void publishMessage(Map data, String additionalParameters = null) {
     Map message = [
         MessageType: "Command",
         SenderID: getClientId(),
-        MessageID: UUID.randomUUID().toString(),
+        MessageID: String.format("%08d-0000-0000-0000-000000000000", state.publishMessageId),
         TargetID: sysId,
         Data: data
     ]
