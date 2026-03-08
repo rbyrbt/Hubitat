@@ -1,4 +1,4 @@
-# PetSafe Smart Feed for Hubitat
+# PetSafe Smart Feeder for Hubitat
 
 This Hubitat integration allows you to control and monitor PetSafe Smart Feed automatic pet feeders from your Hubitat Elevation hub.
 
