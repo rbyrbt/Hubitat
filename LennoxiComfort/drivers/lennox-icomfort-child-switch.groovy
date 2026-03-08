@@ -7,7 +7,8 @@
  *  - Manual Away Mode
  *  - Smart Away Enable
  *  - Zoning (Central Mode)
- *  - Parameter Safety
+ *
+ *  Parameter Safety uses the dedicated driver: Lennox iComfort Child Switch - Parameter Safety
  *
  *  Copyright 2026 rbyrbt
  *  If you find this helpful, feel free to drop a tip https://ko-fi.com/rbyrbt
@@ -27,10 +28,6 @@ import groovy.transform.Field
 @Field static final String SWITCH_TYPE_MANUAL_AWAY = "manualAway"
 @Field static final String SWITCH_TYPE_SMART_AWAY_ENABLE = "smartAwayEnable"
 @Field static final String SWITCH_TYPE_ZONING = "zoning"
-@Field static final String SWITCH_TYPE_PARAMETER_SAFETY = "parameterSafety"
-
-// Parameter safety auto-off time in seconds
-@Field static final Integer PARAMETER_SAFETY_AUTO_OFF_SECONDS = 60
 
 metadata {
     definition(
@@ -52,8 +49,6 @@ metadata {
     }
     
     preferences {
-        input name: "autoOffEnabled", type: "bool", title: "Auto-off enabled (Parameter Safety only)", defaultValue: true
-        input name: "autoOffSeconds", type: "number", title: "Auto-off time (seconds)", defaultValue: 60
         input name: "logEnable", type: "bool", title: "Enable debug logging", defaultValue: true
         input name: "txtEnable", type: "bool", title: "Enable descriptionText logging", defaultValue: true
     }
@@ -127,8 +122,8 @@ void on() {
             parent?.setCentralMode("false")  // Central mode OFF = Zoning ON
             updateSwitchState(true)
             break
-        case SWITCH_TYPE_PARAMETER_SAFETY:
-            turnOnParameterSafety()
+        case "parameterSafety":
+            log.warn "Parameter Safety now uses a dedicated driver. Remove this device and add 'Parameter Safety' again from Manage Devices to get auto-off preferences."
             break
         default:
             log.error "Unknown switch type: ${switchType}"
@@ -161,8 +156,8 @@ void off() {
             parent?.setCentralMode("true")  // Central mode ON = Zoning OFF
             updateSwitchState(false)
             break
-        case SWITCH_TYPE_PARAMETER_SAFETY:
-            turnOffParameterSafety()
+        case "parameterSafety":
+            log.warn "Parameter Safety now uses a dedicated driver. Remove this device and add 'Parameter Safety' again from Manage Devices to get auto-off preferences."
             break
         default:
             log.error "Unknown switch type: ${switchType}"
@@ -188,45 +183,6 @@ void ventilationTimed(BigDecimal minutes) {
     
     Integer durationSeconds = mins * 60
     parent?.setTimedVentilation(durationSeconds)
-}
-
-// Parameter Safety switch logic
-void turnOnParameterSafety() {
-    sendEvent(name: "switch", value: "on", descriptionText: "${device.displayName} is on")
-    state.parameterSafetyOn = true
-    state.parameterSafetyOnTime = now()
-    
-    // Schedule auto-off if enabled
-    if (settings.autoOffEnabled != false) {
-        Integer seconds = settings.autoOffSeconds ?: PARAMETER_SAFETY_AUTO_OFF_SECONDS
-        runIn(seconds, "autoOffParameterSafety")
-        
-        if (txtEnable) log.info "Parameter safety enabled - will auto-disable in ${seconds} seconds"
-    }
-    
-    // Notify parent
-    parent?.parameterSafetyStateChanged(true)
-}
-
-void turnOffParameterSafety() {
-    unschedule("autoOffParameterSafety")
-    sendEvent(name: "switch", value: "off", descriptionText: "${device.displayName} is off")
-    state.parameterSafetyOn = false
-    
-    // Notify parent
-    parent?.parameterSafetyStateChanged(false)
-}
-
-void autoOffParameterSafety() {
-    if (state.parameterSafetyOn) {
-        if (txtEnable) log.info "Parameter safety auto-disabling"
-        turnOffParameterSafety()
-    }
-}
-
-// Check if parameter safety is currently on (used by parent)
-Boolean isParameterSafetyOn() {
-    return state.parameterSafetyOn == true
 }
 
 void logsOff() {

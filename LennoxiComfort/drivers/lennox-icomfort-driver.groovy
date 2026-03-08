@@ -1450,10 +1450,11 @@ void createSwitchDevice(String switchType, String label) {
     
     if (!child) {
         log.info "Creating switch: ${label}"
+        String driverName = (switchType == "parameterSafety") ? "Lennox iComfort Child Switch - Parameter Safety" : "Lennox iComfort Child Switch"
         try {
             child = addChildDevice(
                 "rbyrbt",
-                "Lennox iComfort Child Switch",
+                driverName,
                 dni,
                 [
                     name: "Lennox ${label}",

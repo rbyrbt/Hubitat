@@ -29,6 +29,7 @@ Use Hubitat’s **Import** to pull code directly from GitHub. Install drivers fi
    - Parent driver: `https://raw.githubusercontent.com/rbyrbt/Hubitat/main/LennoxiComfort/drivers/lennox-icomfort-driver.groovy`
    - Zone thermostat: `https://raw.githubusercontent.com/rbyrbt/Hubitat/main/LennoxiComfort/drivers/lennox-icomfort-child-zone-thermostat.groovy`
    - Switch: `https://raw.githubusercontent.com/rbyrbt/Hubitat/main/LennoxiComfort/drivers/lennox-icomfort-child-switch.groovy`
+   - Switch (Parameter Safety): `https://raw.githubusercontent.com/rbyrbt/Hubitat/main/LennoxiComfort/drivers/lennox-icomfort-child-switch-parameter-safety.groovy`
    - Sensor: `https://raw.githubusercontent.com/rbyrbt/Hubitat/main/LennoxiComfort/drivers/lennox-icomfort-child-sensor.groovy`
 
 2. **Apps Code** > **New App** > **Import**. Paste and import, then **Save**:
@@ -37,7 +38,7 @@ Use Hubitat’s **Import** to pull code directly from GitHub. Install drivers fi
 **Hubitat Package Manager (HPM):** If you use [Hubitat Package Manager](https://hubitatpackagemanager.hubitatcommunity.com/) add the repo `https://raw.githubusercontent.com/rbyrbt/Hubitat/main/repository.json` in Settings, then install “Lennox iComfort” from the package manager.
 ### Option B: Manual copy-paste
 
-1. **Drivers Code** > **New Driver** for each file in `LennoxiComfort/drivers/` (parent driver first, then the three child drivers). Copy the file contents from the [repo](https://github.com/rbyrbt/Hubitat) and paste into each new driver; **Save**.
+1. **Drivers Code** > **New Driver** for each file in `LennoxiComfort/drivers/` (parent driver first, then all child drivers). Copy the file contents from the [repo](https://github.com/rbyrbt/Hubitat) and paste into each new driver; **Save**.
 2. **Apps Code** > **New App**. Copy the contents of `LennoxiComfort/apps/lennox-icomfort-app.groovy` from the repo; **Save**.
 
 ### Launch the App
@@ -107,7 +108,7 @@ Repeat **Add a System** for each additional thermostat. The dashboard will show 
 | setCentralMode          | Enable/disable central mode (zoning)                                    |
 | setTimedVentilation     | Run ventilation for specified seconds                                   |
 | clearAlert              | Clear an alert by ID                                                    |
-| setEquipmentParameter   | Modify equipment parameter (requires parameter safety on)               |
+| setEquipmentParameter   | Modify equipment parameter (requires Parameter Safety switch on; that switch has its own driver with auto-off preferences) |
 | getEquipmentDiagnostics | Log equipment information                                               |
 | refreshToken            | Refresh cloud authentication token                                      |
 | removeChildDevices      | Remove all child devices                                                |
@@ -216,11 +217,12 @@ This integration uses the same HTTPS JSON protocol as the official Lennox iComfo
 ### Child Device Types
 
 
-| Driver                                | Purpose                               |
-| ------------------------------------- | ------------------------------------- |
-| Lennox iComfort Child Zone Thermostat | Zone climate control                  |
-| Lennox iComfort Child Switch          | Binary on/off controls                |
-| Lennox iComfort Child Sensor          | Temperature, humidity, status sensors |
+| Driver                                          | Purpose                                                                 |
+| ----------------------------------------------- | ----------------------------------------------------------------------- |
+| Lennox iComfort Child Zone Thermostat            | Zone climate control                                                    |
+| Lennox iComfort Child Switch                     | Binary on/off (ventilation, away modes, allergen defender, zoning)      |
+| Lennox iComfort Child Switch - Parameter Safety  | Safety lock for equipment parameter changes; has auto-off timeout prefs |
+| Lennox iComfort Child Sensor                     | Temperature, humidity, status sensors                                  |
 
 
 ## Credits
