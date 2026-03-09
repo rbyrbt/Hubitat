@@ -819,9 +819,14 @@ Set<String> getRequiredPathGroups() {
     return groups
 }
 
+// Lennox JSONPath format: first token "1" (no slash), then "/path1;/path2;..."
+private static String toJsonPathString(List<String> segments) {
+    if (segments.isEmpty()) return "1;"
+    return "1;" + segments.drop(1).collect { "/${it}" }.join(";") + ";"
+}
+
 String buildLocalPaths1(Set<String> pathGroups) {
-    List<String> p = ["1"]
-    p << "systemControl" << "systemController" << "reminderSensors" << "reminders"
+    List<String> p = ["1", "systemControl", "systemController", "reminderSensors", "reminders"]
     if (pathGroups.contains("alerts")) p << "alerts/active" << "alerts/meta"
     if (pathGroups.contains("ble")) p << "bleProvisionDB" << "ble"
     if (pathGroups.contains("indoorAirQuality")) p << "indoorAirQuality"
@@ -832,21 +837,21 @@ String buildLocalPaths1(Set<String> pathGroups) {
     p << "schedules"
     if (pathGroups.contains("occupancy")) p << "occupancy"
     p << "system"
-    return p.collect { "/${it}" }.join(";") + ";"
+    return toJsonPathString(p)
 }
 
 String buildLocalPaths2(Set<String> pathGroups) {
     List<String> p = ["1"]
     if (pathGroups.contains("interfaces")) p << "interfaces"
     if (p.size() == 1) p << "reminders"
-    return p.collect { "/${it}" }.join(";") + ";"
+    return toJsonPathString(p)
 }
 
 String buildCloudPaths1(Set<String> pathGroups) {
     List<String> p = ["1", "zones", "schedules", "reminderSensors", "reminders"]
     if (pathGroups.contains("occupancy")) p << "occupancy"
     if (pathGroups.contains("alerts")) p << "alerts/active"
-    return p.collect { "/${it}" }.join(";") + ";"
+    return toJsonPathString(p)
 }
 
 String buildCloudPaths2(Set<String> pathGroups) {
@@ -855,7 +860,7 @@ String buildCloudPaths2(Set<String> pathGroups) {
     p << "dealers" << "devices"
     if (pathGroups.contains("equipments")) p << "equipments"
     p << "system" << "fwm" << "ocst"
-    return p.collect { "/${it}" }.join(";") + ";"
+    return toJsonPathString(p)
 }
 
 // Message pump - polls for messages
