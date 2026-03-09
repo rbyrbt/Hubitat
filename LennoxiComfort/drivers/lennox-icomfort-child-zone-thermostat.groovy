@@ -148,20 +148,20 @@ void updateZoneState(Map zoneState, Boolean singleSetpointMode) {
     String spmValue = singleSetpointMode.toString()
     sendEventIfChanged("singleSetpointMode", spmValue)
     if (singleSetpointMode) {
-        if (zoneState.sp != null) {
-            def sp = convertTemp(zoneState.sp, zoneState.spC)
+        def sp = convertTemp(zoneState.sp, zoneState.spC)
+        if (sp != null) {
             String scale = getTemperatureScale()
             sendEventIfChanged("thermostatSetpoint", sp, scale)
             sendEventIfChanged("heatingSetpoint", sp, scale)
             sendEventIfChanged("coolingSetpoint", sp, scale)
         }
     } else {
-        if (zoneState.hsp != null) {
-            def hsp = convertTemp(zoneState.hsp, zoneState.hspC)
+        def hsp = convertTemp(zoneState.hsp, zoneState.hspC)
+        if (hsp != null) {
             sendEventIfChanged("heatingSetpoint", hsp, getTemperatureScale(), "${device.displayName} heating setpoint is ${hsp}°${getTemperatureScale()}")
         }
-        if (zoneState.csp != null) {
-            def csp = convertTemp(zoneState.csp, zoneState.cspC)
+        def csp = convertTemp(zoneState.csp, zoneState.cspC)
+        if (csp != null) {
             sendEventIfChanged("coolingSetpoint", csp, getTemperatureScale(), "${device.displayName} cooling setpoint is ${csp}°${getTemperatureScale()}")
         }
         updateThermostatSetpoint()
@@ -456,9 +456,11 @@ private static Boolean valuesEqualAsNumber(def a, def b) {
 
 def convertTemp(tempF, tempC) {
     if (getTemperatureScale() == "C") {
-        return tempC ?: fahrenheitToCelsius(tempF)
+        if (tempC != null) return new BigDecimal(tempC.toString())
+        return tempF != null ? fahrenheitToCelsius(new BigDecimal(tempF.toString())) : null
     }
-    return tempF
+    if (tempF != null) return new BigDecimal(tempF.toString())
+    return tempC != null ? celsiusToFahrenheit(new BigDecimal(tempC.toString())) : null
 }
 
 BigDecimal fahrenheitToCelsius(BigDecimal f) {

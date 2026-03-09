@@ -1303,8 +1303,10 @@ void processZonesMessage(List zones) {
         if (zone.scheduleId != null) zoneState.scheduleId = zone.scheduleId
         if (zone.name != null) zoneState.name = zone.name
         
-        // Create or update child thermostat device
-        if (zoneState.name && zoneState.temperature != null) {
+        // Create or update child thermostat device when we have name and enough data to display (temp or setpoints)
+        Boolean hasTemp = zoneState.temperature != null
+        Boolean hasSetpoints = (zoneState.hsp != null || zoneState.hspC != null || zoneState.csp != null || zoneState.cspC != null || zoneState.sp != null || zoneState.spC != null)
+        if (zoneState.name && (hasTemp || hasSetpoints)) {
             createOrUpdateZoneThermostat(zoneId, zoneState)
         }
     }
