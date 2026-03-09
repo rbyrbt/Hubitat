@@ -14,6 +14,13 @@ Control Winix air purifiers from your Hubitat Elevation hub. This app and driver
 - **Filter Life Tracking** - Track filter usage hours and replacement status
 - **Child Devices** - Optional separate devices for Air Quality Sensor, Plasmawave, Auto Mode, and Sleep Mode switches
 
+## Device Support
+
+- Winix C545
+- Winix C610 (untested)
+- Winix C909 (untested)
+- May support other models
+
 ## Installation
 
 ### Hubitat Package Manager (Recommended)
