@@ -15,7 +15,6 @@ import groovy.json.JsonSlurper
 import groovy.json.JsonOutput
 import groovy.transform.Field
 
-@Field static final String VERSION = "1.0.0"
 @Field static final String DRIVER_NAME = "Lennox iComfort Driver"
 
 // Connection states

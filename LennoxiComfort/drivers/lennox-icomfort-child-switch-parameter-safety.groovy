@@ -14,7 +14,6 @@
 
 import groovy.transform.Field
 
-@Field static final String VERSION = "1.0.0"
 @Field static final String DRIVER_NAME = "Lennox iComfort Child Switch - Parameter Safety"
 
 @Field static final Integer DEFAULT_AUTO_OFF_SECONDS = 60

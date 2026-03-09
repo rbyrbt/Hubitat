@@ -1,51 +1,51 @@
 {
-  "packageName": "Winix Air Purifiers",
-  "author": "rbyrbt",
-  "version": "1.1",
-  "minimumHEVersion": "2.1.9",
-  "dateReleased": "2026-03-07",
-  "documentationLink": "https://github.com/rbyrbt/Hubitat/blob/main/WinixAirPurifiers/README.md",
-  "payPalUrl": "https://ko-fi.com/rbyrbt",
-  "releaseNotes": "Initial HPM release.",
-  "tags": [ "Climate Control", "Temperature & Humidity", "Cloud" ],
-  "apps": [
-    {
-      "id": "ade0c1d1-00e1-4fae-9b73-5794fb5b96e3",
-      "name": "Winix Air Purifier Connect",
-      "namespace": "rbyrbt",
-      "location": "https://raw.githubusercontent.com/rbyrbt/Hubitat/main/WinixAirPurifiers/apps/winix-connect-app.groovy",
-      "required": true,
-      "oauth": false
-    }
-  ],
-  "drivers": [
-    {
-      "id": "cd60833c-8516-466f-99e8-a878c90b2aed",
-      "name": "Winix Air Purifier",
-      "namespace": "rbyrbt",
-      "location": "https://raw.githubusercontent.com/rbyrbt/Hubitat/main/WinixAirPurifiers/drivers/winix-purifier-driver.groovy",
-      "required": true
-    },
-    {
-      "id": "39b5baf3-c1c3-485d-92d2-4bac87eb4ff2",
-      "name": "Winix Child Switch",
-      "namespace": "rbyrbt",
-      "location": "https://raw.githubusercontent.com/rbyrbt/Hubitat/main/WinixAirPurifiers/drivers/winix-child-switch-driver.groovy",
-      "required": true
-    },
-    {
-      "id": "33849767-08c1-4af1-957b-a403d067d70e",
-      "name": "Winix Air Quality Sensor",
-      "namespace": "rbyrbt",
-      "location": "https://raw.githubusercontent.com/rbyrbt/Hubitat/main/WinixAirPurifiers/drivers/winix-child-air-quality-driver.groovy",
-      "required": true
-    },
-    {
-      "id": "3d4762df-1d17-401e-831b-1ff978e0999f",
-      "name": "Winix Light Sensor",
-      "namespace": "rbyrbt",
-      "location": "https://raw.githubusercontent.com/rbyrbt/Hubitat/main/WinixAirPurifiers/drivers/winix-child-light-sensor-driver.groovy",
-      "required": true
-    }
-  ]
+	"packageName": "Winix Air Purifiers",
+	"author": "rbyrbt",
+	"version": "1.1.0",
+	"minimumHEVersion": "2.1.9",
+	"dateReleased": "2026-03-07",
+	"documentationLink": "https://github.com/rbyrbt/Hubitat/blob/main/WinixAirPurifiers/README.md",
+	"payPalUrl": "https://ko-fi.com/rbyrbt",
+	"releaseNotes": "Initial HPM release.",
+	"tags": ["Climate Control", "Temperature & Humidity", "Cloud"],
+	"apps": [
+		{
+			"id": "ade0c1d1-00e1-4fae-9b73-5794fb5b96e3",
+			"name": "Winix Air Purifier Connect",
+			"namespace": "rbyrbt",
+			"location": "https://raw.githubusercontent.com/rbyrbt/Hubitat/main/WinixAirPurifiers/apps/winix-connect-app.groovy",
+			"required": true,
+			"oauth": false
+		}
+	],
+	"drivers": [
+		{
+			"id": "cd60833c-8516-466f-99e8-a878c90b2aed",
+			"name": "Winix Air Purifier",
+			"namespace": "rbyrbt",
+			"location": "https://raw.githubusercontent.com/rbyrbt/Hubitat/main/WinixAirPurifiers/drivers/winix-purifier-driver.groovy",
+			"required": true
+		},
+		{
+			"id": "39b5baf3-c1c3-485d-92d2-4bac87eb4ff2",
+			"name": "Winix Child Switch",
+			"namespace": "rbyrbt",
+			"location": "https://raw.githubusercontent.com/rbyrbt/Hubitat/main/WinixAirPurifiers/drivers/winix-child-switch-driver.groovy",
+			"required": true
+		},
+		{
+			"id": "33849767-08c1-4af1-957b-a403d067d70e",
+			"name": "Winix Air Quality Sensor",
+			"namespace": "rbyrbt",
+			"location": "https://raw.githubusercontent.com/rbyrbt/Hubitat/main/WinixAirPurifiers/drivers/winix-child-air-quality-driver.groovy",
+			"required": true
+		},
+		{
+			"id": "3d4762df-1d17-401e-831b-1ff978e0999f",
+			"name": "Winix Light Sensor",
+			"namespace": "rbyrbt",
+			"location": "https://raw.githubusercontent.com/rbyrbt/Hubitat/main/WinixAirPurifiers/drivers/winix-child-light-sensor-driver.groovy",
+			"required": true
+		}
+	]
 }
