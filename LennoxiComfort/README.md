@@ -22,7 +22,7 @@ Hubitat app and drivers for Lennox iComfort S30, E30, S40, and M30 smart thermos
 1. Open [Hubitat Package Manager](https://hubitatpackagemanager.hubitatcommunity.com/).
 2. Search for **Lennox iComfort** to install the package.
 
-### Driver and app import from GitHub
+### Driver and App import from GitHub (Manual Option)
 
 If you prefer not to use HPM, install via Hubitat’s **Import** (drivers first, then app).
 

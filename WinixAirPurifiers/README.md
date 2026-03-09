@@ -21,7 +21,7 @@ Control Winix air purifiers from your Hubitat Elevation hub. This app and driver
 1. Open [Hubitat Package Manager](https://hubitatpackagemanager.hubitatcommunity.com/).
 2. Search for **Winix Air Purifiers** to install the package.
 
-### Driver and app import from GitHub
+### Driver and App import from GitHub (Manual Option)
 
 If you prefer not to use HPM, install via Hubitat’s **Import** (drivers first, then app).
 

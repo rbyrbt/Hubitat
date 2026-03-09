@@ -23,7 +23,7 @@ This Hubitat integration allows you to control and monitor PetSafe Smart Feed au
 1. Open [Hubitat Package Manager](https://hubitatpackagemanager.hubitatcommunity.com/).
 2. Search for **PetSafe Smart Feeder** to install the package.
 
-### Driver and app import from GitHub
+### Driver and App import from GitHub (Manual Option)
 
 If you prefer not to use HPM, install via Hubitat’s **Import** (drivers first, then app).
 
