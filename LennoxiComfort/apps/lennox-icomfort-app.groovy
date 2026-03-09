@@ -12,7 +12,8 @@
  *
  *  REVISION HISTORY
  *
- *  v1.0   03-07-26   Initial release
+ *  v1.1.0   03-07-26   Initial release
+ *  v1.1.1   03-09-26   RequestData improvements
  *
  */
 
