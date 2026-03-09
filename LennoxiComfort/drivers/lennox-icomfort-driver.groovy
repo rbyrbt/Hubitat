@@ -316,6 +316,7 @@ void connectLocal() {
                 state.connected = true
                 state.isLocalConnection = true
                 state.appId = appId
+                state.consecutiveRetrieveFailures = 0
                 resetReconnectBackoff()
                 sendEvent(name: "connectionState", value: STATE_CONNECTED)
                 
@@ -934,6 +935,7 @@ void handleMessagePumpResponse(resp, data) {
     
     try {
         if (resp.status == 200) {
+            state.consecutiveRetrieveFailures = 0
             String body = resp.getData()
             if (body) {
                 def json = new JsonSlurper().parseText(body)
@@ -950,6 +952,7 @@ void handleMessagePumpResponse(resp, data) {
                 }
             }
         } else if (resp.status == 204) {
+            state.consecutiveRetrieveFailures = 0
             // No messages - this is normal
             if (logEnable) log.debug "No messages available"
         } else if (resp.status == 401) {
@@ -959,7 +962,18 @@ void handleMessagePumpResponse(resp, data) {
             scheduleReconnect()
             return
         } else {
-            // 400 is often returned by Lennox due to server header quirks (e.g. Content-Length + Transfer-Encoding). Log at debug to avoid log spam; pump continues.
+            // Local: 400/408 after long run often means S30 session invalidated; reconnect to get fresh session
+            if (state.isLocalConnection && (resp.status == 400 || resp.status == 408)) {
+                state.consecutiveRetrieveFailures = (state.consecutiveRetrieveFailures ?: 0) + 1
+                Integer threshold = 5
+                if (state.consecutiveRetrieveFailures >= threshold) {
+                    log.warn "Local Retrieve failed ${state.consecutiveRetrieveFailures} times (${resp.status}) - reconnecting to restore session"
+                    state.connected = false
+                    sendEvent(name: "connectionState", value: STATE_RETRY_WAIT)
+                    runIn(5, "connect")
+                    return
+                }
+            }
             String errBody = ""
             try { errBody = resp.getData() ?: "" } catch (Exception ignored) {}
             if (errBody) errBody = errBody.take(200) + (errBody.size() > 200 ? "..." : "")
