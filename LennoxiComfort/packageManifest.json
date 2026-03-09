@@ -5,6 +5,7 @@
 	"minimumHEVersion": "2.1.9",
 	"dateReleased": "2026-03-07",
 	"documentationLink": "https://github.com/rbyrbt/Hubitat/blob/main/LennoxiComfort/README.md",
+	"communityLink": "https://community.hubitat.com/t/release-lennox-icomfort-s30/162305",
 	"payPalUrl": "https://ko-fi.com/rbyrbt",
 	"releaseNotes": "Polling defaults (1 min cloud / 30 s local), faster discovery polling, optimistic UI updates for zone and switch commands, local API 400 fix, zone setpoint sync from Lennox app.",
 	"tags": ["Climate Control", "Temperature & Humidity", "Cloud", "LAN"],
