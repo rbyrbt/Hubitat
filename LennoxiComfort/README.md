@@ -17,33 +17,30 @@ Hubitat app and drivers for Lennox iComfort S30, E30, S40, and M30 smart thermos
 
 ## Installation
 
-**Repository:** [github.com/rbyrbt/Hubitat](https://github.com/rbyrbt/Hubitat) (package in `LennoxiComfort/`)
+### Hubitat Package Manager (Recommended)
 
-### Option A: Import from GitHub (recommended)
+1. Open [Hubitat Package Manager](https://hubitatpackagemanager.hubitatcommunity.com/).
+2. Search for **Lennox iComfort** to install the package.
 
-Use Hubitat’s **Import** to pull code directly from GitHub. Install drivers first, then the app.
+### Driver and app import from GitHub
 
-**Drivers (install in this order):**
+If you prefer not to use HPM, install via Hubitat’s **Import** (drivers first, then app).
 
-1. **Drivers Code** > **New Driver** > **Import**. Paste each URL and click **Import**, then **Save**:
-   - Parent driver: `https://raw.githubusercontent.com/rbyrbt/Hubitat/main/LennoxiComfort/drivers/lennox-icomfort-driver.groovy`
-   - Zone thermostat: `https://raw.githubusercontent.com/rbyrbt/Hubitat/main/LennoxiComfort/drivers/lennox-icomfort-child-zone-thermostat.groovy`
-   - Switch: `https://raw.githubusercontent.com/rbyrbt/Hubitat/main/LennoxiComfort/drivers/lennox-icomfort-child-switch.groovy`
-   - Switch (Parameter Safety): `https://raw.githubusercontent.com/rbyrbt/Hubitat/main/LennoxiComfort/drivers/lennox-icomfort-child-switch-parameter-safety.groovy`
-   - Sensor: `https://raw.githubusercontent.com/rbyrbt/Hubitat/main/LennoxiComfort/drivers/lennox-icomfort-child-sensor.groovy`
+**Drivers Code** → **New Driver** → **Import**. Paste each URL, click **Import**, then **Save** (parent first, then child drivers):
 
-2. **Apps Code** > **New App** > **Import**. Paste and import, then **Save**:
-   - `https://raw.githubusercontent.com/rbyrbt/Hubitat/main/LennoxiComfort/apps/lennox-icomfort-app.groovy`
+- `https://raw.githubusercontent.com/rbyrbt/Hubitat/main/LennoxiComfort/drivers/lennox-icomfort-driver.groovy`
+- `https://raw.githubusercontent.com/rbyrbt/Hubitat/main/LennoxiComfort/drivers/lennox-icomfort-child-zone-thermostat.groovy`
+- `https://raw.githubusercontent.com/rbyrbt/Hubitat/main/LennoxiComfort/drivers/lennox-icomfort-child-switch.groovy`
+- `https://raw.githubusercontent.com/rbyrbt/Hubitat/main/LennoxiComfort/drivers/lennox-icomfort-child-switch-parameter-safety.groovy`
+- `https://raw.githubusercontent.com/rbyrbt/Hubitat/main/LennoxiComfort/drivers/lennox-icomfort-child-sensor.groovy`
 
-**Hubitat Package Manager (HPM):** If you use [Hubitat Package Manager](https://hubitatpackagemanager.hubitatcommunity.com/) add the repo `https://raw.githubusercontent.com/rbyrbt/Hubitat/main/repository.json` in Settings, then install “Lennox iComfort” from the package manager.
-### Option B: Manual copy-paste
+**Apps Code** → **New App** → **Import**. Paste this URL and click **Import**, then **Save**:
 
-1. **Drivers Code** > **New Driver** for each file in `LennoxiComfort/drivers/` (parent driver first, then all child drivers). Copy the file contents from the [repo](https://github.com/rbyrbt/Hubitat) and paste into each new driver; **Save**.
-2. **Apps Code** > **New App**. Copy the contents of `LennoxiComfort/apps/lennox-icomfort-app.groovy` from the repo; **Save**.
+- `https://raw.githubusercontent.com/rbyrbt/Hubitat/main/LennoxiComfort/apps/lennox-icomfort-app.groovy`
 
-### Launch the App
+### Add the App
 
-1. Go to **Apps** > **Add User App**
+1. Go to **Apps** → **Add User App**
 2. Select **Lennox iComfort Manager**
 3. The app dashboard will open
 
@@ -51,8 +48,10 @@ Use Hubitat’s **Import** to pull code directly from GitHub. Install drivers fi
 
 1. From the dashboard, tap **Add New System**
 2. Select your connection type:
-  - **Lennox Cloud**: Enter your iComfort account email and password (works with all models)
-  - **Local LAN**: Enter your thermostat's IP address (S30, S40, E30 only)
+
+- **Lennox Cloud**: Enter your iComfort account email and password (works with all models)
+- **Local LAN**: Enter your thermostat's IP address (S30, S40, E30 only)
+
 3. Give the system a label (e.g., "Main Floor Lennox")
 4. Configure polling and device creation options
 5. Review and confirm
@@ -65,23 +64,21 @@ Repeat **Add a System** for each additional thermostat. The dashboard will show 
 
 ## Configuration Options
 
-
-| Setting                    | Description                                                        | Default      |
-| -------------------------- | ------------------------------------------------------------------ | ------------ |
-| Connection Type            | Lennox Cloud or Local LAN                                          | -            |
-| Email                      | Lennox account email (cloud)                                       | -            |
-| Password                   | Lennox account password (cloud)                                    | -            |
-| IP Address                 | Thermostat IP (local)                                              | -            |
-| Application ID             | Custom app ID for the Lennox session ([details](#application-id))  | auto         |
-| Poll Interval (Cloud)      | How often to poll (10s - 2hr)                                      | 1 minute     |
-| Poll Interval (Local)      | How often to poll (1s - 1hr)                                       | 30 seconds   |
-| Fast Poll Interval         | Polling rate after commands                                        | 0.75 seconds |
-| Fast Poll Count            | Number of fast polls after command                                 | 10           |
-| Long Poll Timeout          | Retrieve request wait time (local only)                            | 15 seconds   |
-| Create Sensors             | Automatically create sensor devices                                | true         |
-| Create Switches            | Automatically create switch devices                                | true         |
-| Create Diagnostic Sensors  | Create child sensors for equipment diagnostics (can be 40-50+)     | false        |
-
+| Setting                   | Description                                                       | Default      |
+| ------------------------- | ----------------------------------------------------------------- | ------------ |
+| Connection Type           | Lennox Cloud or Local LAN                                         | -            |
+| Email                     | Lennox account email (cloud)                                      | -            |
+| Password                  | Lennox account password (cloud)                                   | -            |
+| IP Address                | Thermostat IP (local)                                             | -            |
+| Application ID            | Custom app ID for the Lennox session ([details](#application-id)) | auto         |
+| Poll Interval (Cloud)     | How often to poll (10s - 2hr)                                     | 1 minute     |
+| Poll Interval (Local)     | How often to poll (1s - 1hr)                                      | 30 seconds   |
+| Fast Poll Interval        | Polling rate after commands                                       | 0.75 seconds |
+| Fast Poll Count           | Number of fast polls after command                                | 10           |
+| Long Poll Timeout         | Retrieve request wait time (local only)                           | 15 seconds   |
+| Create Sensors            | Automatically create sensor devices                               | true         |
+| Create Switches           | Automatically create switch devices                               | true         |
+| Create Diagnostic Sensors | Create child sensors for equipment diagnostics (can be 40-50+)    | false        |
 
 > **Polling note**: Cloud connections make full HTTPS round-trips to Lennox servers; default is 1 minute. Local connections use long-polling where the thermostat pushes data as it arrives; default is 30 seconds. Faster polling is used automatically during initial device discovery.
 
@@ -91,33 +88,30 @@ Repeat **Add a System** for each additional thermostat. The dashboard will show 
 
 ### Parent Device (Controller)
 
-
-| Command                 | Description                                                             |
-| ----------------------- | ----------------------------------------------------------------------- |
-| connect                 | Connect to thermostat                                                   |
-| disconnect              | Disconnect from thermostat                                              |
-| refresh                 | Request fresh data                                                      |
-| setAllergenDefender     | Enable/disable allergen defender                                        |
-| setVentilationMode      | Set ventilation to on/off/installer                                     |
-| setManualAwayMode       | Enable/disable manual away mode                                         |
-| setSmartAwayEnabled     | Enable/disable smart away                                               |
-| cancelSmartAway         | Cancel active smart away                                                |
-| setCirculateTime        | Set fan circulate time (15-45%)                                         |
-| setDiagnosticLevel      | Set diagnostic level (0/1/2) -- see [Diagnostic Mode](#diagnostic-mode) |
-| setDehumidificationMode | Set dehumidification mode                                               |
-| setCentralMode          | Enable/disable central mode (zoning)                                    |
-| setTimedVentilation     | Run ventilation for specified seconds                                   |
-| clearAlert              | Clear an alert by ID                                                    |
+| Command                 | Description                                                                                                                |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| connect                 | Connect to thermostat                                                                                                      |
+| disconnect              | Disconnect from thermostat                                                                                                 |
+| refresh                 | Request fresh data                                                                                                         |
+| setAllergenDefender     | Enable/disable allergen defender                                                                                           |
+| setVentilationMode      | Set ventilation to on/off/installer                                                                                        |
+| setManualAwayMode       | Enable/disable manual away mode                                                                                            |
+| setSmartAwayEnabled     | Enable/disable smart away                                                                                                  |
+| cancelSmartAway         | Cancel active smart away                                                                                                   |
+| setCirculateTime        | Set fan circulate time (15-45%)                                                                                            |
+| setDiagnosticLevel      | Set diagnostic level (0/1/2) -- see [Diagnostic Mode](#diagnostic-mode)                                                    |
+| setDehumidificationMode | Set dehumidification mode                                                                                                  |
+| setCentralMode          | Enable/disable central mode (zoning)                                                                                       |
+| setTimedVentilation     | Run ventilation for specified seconds                                                                                      |
+| clearAlert              | Clear an alert by ID                                                                                                       |
 | setEquipmentParameter   | Modify equipment parameter (requires Parameter Safety switch on; that switch has its own driver with auto-off preferences) |
-| getEquipmentDiagnostics | Log equipment information                                               |
-| refreshToken            | Refresh cloud authentication token                                      |
-| removeChildDevices      | Remove all child devices                                                |
-
+| getEquipmentDiagnostics | Log equipment information                                                                                                  |
+| refreshToken            | Refresh cloud authentication token                                                                                         |
+| removeChildDevices      | Remove all child devices                                                                                                   |
 
 ### Zone Thermostat
 
 Standard Hubitat thermostat commands plus:
-
 
 | Command               | Description                                      |
 | --------------------- | ------------------------------------------------ |
@@ -127,18 +121,15 @@ Standard Hubitat thermostat commands plus:
 | setSchedule           | Set schedule by ID                               |
 | resumeSchedule        | Resume automatic schedule                        |
 
-
 ## Diagnostic Mode
 
 Lennox controllers support three diagnostic levels, controlled via the `setDiagnosticLevel` command:
-
 
 | Level | Description                                                                                                                                                                                                                                                                                              |
 | ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **0** | Diagnostics disabled (default). The controller sends only normal thermostat data. This is the standard operating mode.                                                                                                                                                                                   |
 | **1** | Accepted by the Lennox API but its behavior is undocumented. The upstream lennoxs30 project considers only 0 and 2 as valid levels. May enable a reduced set of diagnostic data or function as a transitional state.                                                                                     |
 | **2** | Full diagnostics. Enables all equipment sensor data (voltages, currents, fan speeds, refrigerant pressures) and inverter power monitoring. The controller sends updates every 4 seconds. **S30 controllers require internet isolation -- see warning below.** A power outage resets the level back to 0. |
-
 
 ### Level 2 S30 Stability Warning
 
@@ -216,14 +207,16 @@ This integration uses the same HTTPS JSON protocol as the official Lennox iComfo
 
 ### Child Device Types
 
-
 | Driver                                          | Purpose                                                                 |
 | ----------------------------------------------- | ----------------------------------------------------------------------- |
-| Lennox iComfort Child Zone Thermostat            | Zone climate control                                                    |
-| Lennox iComfort Child Switch                     | Binary on/off (ventilation, away modes, allergen defender, zoning)      |
-| Lennox iComfort Child Switch - Parameter Safety  | Safety lock for equipment parameter changes; has auto-off timeout prefs |
-| Lennox iComfort Child Sensor                     | Temperature, humidity, status sensors                                  |
+| Lennox iComfort Child Zone Thermostat           | Zone climate control                                                    |
+| Lennox iComfort Child Switch                    | Binary on/off (ventilation, away modes, allergen defender, zoning)      |
+| Lennox iComfort Child Switch - Parameter Safety | Safety lock for equipment parameter changes; has auto-off timeout prefs |
+| Lennox iComfort Child Sensor                    | Temperature, humidity, status sensors                                   |
 
+## Donations
+
+If you find this helpful, feel free to drop a tip [https://ko-fi.com/rbyrbt](https://ko-fi.com/rbyrbt)
 
 ## Credits
 

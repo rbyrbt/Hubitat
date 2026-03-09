@@ -18,22 +18,22 @@ This Hubitat integration allows you to control and monitor PetSafe Smart Feed au
 
 ## Installation
 
-**Repository:** [github.com/rbyrbt/Hubitat](https://github.com/rbyrbt/Hubitat) (package in `PetSafeSmartFeeder/`)
+### Hubitat Package Manager (Recommended)
 
-### Option A: Import from GitHub (recommended)
+1. Open [Hubitat Package Manager](https://hubitatpackagemanager.hubitatcommunity.com/).
+2. Search for **PetSafe Smart Feeder** to install the package.
 
-Use Hubitat’s **Import** to pull code directly from GitHub. Install the driver first, then the app.
+### Driver and app import from GitHub
 
-1. **Drivers Code** > **New Driver** > **Import**. Paste this URL and click **Import**, then **Save**:
-   - `https://raw.githubusercontent.com/rbyrbt/Hubitat/main/PetSafeSmartFeeder/drivers/petsafe-feeder.groovy`
-2. **Apps Code** > **New App** > **Import**. Paste this URL and click **Import**, then **Save**:
-   - `https://raw.githubusercontent.com/rbyrbt/Hubitat/main/PetSafeSmartFeeder/apps/petsafe-manager.groovy`
+If you prefer not to use HPM, install via Hubitat’s **Import** (drivers first, then app).
 
-**Hubitat Package Manager (HPM):** If you use [Hubitat Package Manager](https://hubitatpackagemanager.hubitatcommunity.com/) add the repo `https://raw.githubusercontent.com/rbyrbt/Hubitat/main/repository.json` in Settings, then install “PetSafe Smart Feeder” from the package manager.
-### Option B: Manual copy-paste
+**Drivers Code** → **New Driver** → **Import**. Paste URL, click **Import**, then **Save**:
 
-1. **Drivers Code** > **New Driver**. Copy the contents of `PetSafeSmartFeeder/drivers/petsafe-feeder.groovy` from the [repo](https://github.com/rbyrbt/Hubitat); paste and **Save**.
-2. **Apps Code** > **New App**. Copy the contents of `PetSafeSmartFeeder/apps/petsafe-manager.groovy` from the repo; paste and **Save**.
+- `https://raw.githubusercontent.com/rbyrbt/Hubitat/main/PetSafeSmartFeeder/drivers/petsafe-feeder.groovy`
+
+**Apps Code** → **New App** → **Import**. Paste URL, click **Import**, then **Save**:
+
+- `https://raw.githubusercontent.com/rbyrbt/Hubitat/main/PetSafeSmartFeeder/apps/petsafe-manager.groovy`
 
 ### Add the App
 
@@ -300,6 +300,10 @@ Avoid:
 ## HomeKit Integration
 
 If you want to access your PetSafe feeders via Apple HomeKit, you can use Hubitat's built-in [HomeKit Integration](https://docs.hubitat.com/index.php?title=HomeKit_Integration) to expose the feeder devices to HomeKit.
+
+## Donations
+
+If you find this helpful, feel free to drop a tip [https://ko-fi.com/rbyrbt](https://ko-fi.com/rbyrbt)
 
 ## Credits
 

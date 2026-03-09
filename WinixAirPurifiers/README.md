@@ -16,30 +16,27 @@ Control Winix air purifiers from your Hubitat Elevation hub. This app and driver
 
 ## Installation
 
-**Repository:** [github.com/rbyrbt/Hubitat](https://github.com/rbyrbt/Hubitat) (package in `WinixAirPurifiers/`)
+### Hubitat Package Manager (Recommended)
 
-### Option A: Import from GitHub (recommended)
+1. Open [Hubitat Package Manager](https://hubitatpackagemanager.hubitatcommunity.com/).
+2. Search for **Winix Air Purifiers** to install the package.
 
-Use Hubitat’s **Import** to pull code directly from GitHub. Install drivers first, then the app.
+### Driver and app import from GitHub
 
-**Drivers (install in this order):**
+If you prefer not to use HPM, install via Hubitat’s **Import** (drivers first, then app).
 
-1. **Drivers Code** > **New Driver** > **Import**. Paste each URL and click **Import**, then **Save**:
-   - Parent driver: `https://raw.githubusercontent.com/rbyrbt/Hubitat/main/WinixAirPurifiers/drivers/winix-purifier-driver.groovy`
-   - Child switch: `https://raw.githubusercontent.com/rbyrbt/Hubitat/main/WinixAirPurifiers/drivers/winix-child-switch-driver.groovy`
-   - Child air quality: `https://raw.githubusercontent.com/rbyrbt/Hubitat/main/WinixAirPurifiers/drivers/winix-child-air-quality-driver.groovy`
-   - Child light sensor: `https://raw.githubusercontent.com/rbyrbt/Hubitat/main/WinixAirPurifiers/drivers/winix-child-light-sensor-driver.groovy`
+**Drivers Code** → **New Driver** → **Import**. Paste each URL, click **Import**, then **Save** (parent first, then child drivers):
 
-2. **Apps Code** > **New App** > **Import**. Paste and import, then **Save**:
-   - `https://raw.githubusercontent.com/rbyrbt/Hubitat/main/WinixAirPurifiers/apps/winix-connect-app.groovy`
+- `https://raw.githubusercontent.com/rbyrbt/Hubitat/main/WinixAirPurifiers/drivers/winix-purifier-driver.groovy`
+- `https://raw.githubusercontent.com/rbyrbt/Hubitat/main/WinixAirPurifiers/drivers/winix-child-switch-driver.groovy`
+- `https://raw.githubusercontent.com/rbyrbt/Hubitat/main/WinixAirPurifiers/drivers/winix-child-air-quality-driver.groovy`
+- `https://raw.githubusercontent.com/rbyrbt/Hubitat/main/WinixAirPurifiers/drivers/winix-child-light-sensor-driver.groovy`
 
-**Hubitat Package Manager (HPM):** If you use [Hubitat Package Manager](https://hubitatpackagemanager.hubitatcommunity.com/) add the repo `https://raw.githubusercontent.com/rbyrbt/Hubitat/main/repository.json` in Settings, then install “Winix Air Purifiers” from the package manager.
-### Option B: Manual copy-paste
+**Apps Code** → **New App** → **Import**. Paste this URL and click **Import**, then **Save**:
 
-1. **Drivers Code** > **New Driver** for each file in `WinixAirPurifiers/drivers/` (parent driver first, then the three child drivers). Copy the file contents from the [repo](https://github.com/rbyrbt/Hubitat) and paste into each new driver; **Save**.
-2. **Apps Code** > **New App**. Copy the contents of `WinixAirPurifiers/apps/winix-connect-app.groovy` from the repo; **Save**.
+- `https://raw.githubusercontent.com/rbyrbt/Hubitat/main/WinixAirPurifiers/apps/winix-connect-app.groovy`
 
-### Configure the App
+### Add the App
 
 1. Go to **Apps** → **Add User App**
 2. Select **Winix Connect**
@@ -157,6 +154,10 @@ The built-in FanControl capability includes default speeds that can't be removed
 - Enable debug logging in device preferences
 - Check logs for "control success" messages
 - Verify the attribute codes match your device model
+
+## Donations
+
+If you find this helpful, feel free to drop a tip [https://ko-fi.com/rbyrbt](https://ko-fi.com/rbyrbt)
 
 ## Credits
 
