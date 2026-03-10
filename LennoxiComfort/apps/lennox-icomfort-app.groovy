@@ -638,6 +638,41 @@ String createLennoxDevice() {
 }
 
 // ---------------------------------------------------------------------------
+// Cloud token storage (per device; not stored on device so not visible in State Variables)
+// Keys: authBearerToken, loginBearerToken, loginToken
+// ---------------------------------------------------------------------------
+
+Map getCloudTokens(String deviceId) {
+    if (!deviceId) return [:]
+    if (!state.cloudTokens) state.cloudTokens = [:]
+    return (state.cloudTokens[deviceId] ?: [:]) as Map
+}
+
+void storeAuthBearerToken(String deviceId, String authBearerToken) {
+    if (!deviceId) return
+    if (!state.cloudTokens) state.cloudTokens = [:]
+    Map t = (state.cloudTokens[deviceId] ?: [:]) as Map
+    t.authBearerToken = authBearerToken
+    state.cloudTokens[deviceId] = t
+}
+
+void storeLoginTokens(String deviceId, String loginBearerToken, String loginToken) {
+    if (!deviceId) return
+    if (!state.cloudTokens) state.cloudTokens = [:]
+    Map t = (state.cloudTokens[deviceId] ?: [:]) as Map
+    t.loginBearerToken = loginBearerToken
+    t.loginToken = loginToken
+    state.cloudTokens[deviceId] = t
+}
+
+void clearCloudTokens(String deviceId) {
+    if (!deviceId) return
+    if (state.cloudTokens != null && state.cloudTokens.containsKey(deviceId)) {
+        state.cloudTokens.remove(deviceId)
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Button Handlers
 // ---------------------------------------------------------------------------
 
@@ -677,6 +712,8 @@ void removeSystem(String deviceId) {
     }
 
     log.info "Removing Lennox system: ${dev.label}"
+
+    clearCloudTokens(deviceId)
 
     try {
         // Disconnect first

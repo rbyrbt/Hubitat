@@ -99,6 +99,7 @@ metadata {
         command "getEquipmentDiagnostics"
         command "refreshToken"
         command "removeChildDevices"
+        command "clearMessageQueue"
     }
     
     preferences {
@@ -291,6 +292,8 @@ void disconnect() {
     }
     
     state.connected = false
+    state.pendingMessageBatch = null
+    state.queuedMessageBatch = null
     sendEvent(name: "connectionState", value: STATE_DISCONNECTED)
 }
 
@@ -354,7 +357,12 @@ void disconnectLocal() {
     }
 }
 
-// Cloud connection methods
+// Cloud connection methods (tokens stored in parent app state, not device state)
+private Map getCloudTokensFromApp() {
+    def app = getParent()
+    return (app != null ? app.getCloudTokens(device.deviceNetworkId) : null) ?: [:]
+}
+
 void connectCloud() {
     log.info "Connecting to Lennox cloud..."
     
@@ -384,9 +392,9 @@ void handleAuthenticateResponse(resp, data) {
     try {
         if (resp.status == 200) {
             def json = new JsonSlurper().parseText(resp.getData())
-            state.authBearerToken = json?.serverAssigned?.security?.certificateToken?.encoded
-
-            if (state.authBearerToken) {
+            String authBearerToken = json?.serverAssigned?.security?.certificateToken?.encoded
+            if (authBearerToken) {
+                getParent()?.storeAuthBearerToken(device.deviceNetworkId, authBearerToken)
                 log.info "Cloud authentication successful"
                 runIn(1, "loginCloud")
             } else {
@@ -428,7 +436,16 @@ void loginCloud() {
     log.info "Logging into Lennox cloud..."
     
     String appId = sanitizeAppId(settings.appId) ?: DEFAULT_CLOUD_APP_ID
-    
+    Map tokens = getCloudTokensFromApp()
+    String authBearerToken = tokens.authBearerToken
+
+    if (!authBearerToken) {
+        log.error "No auth bearer token available for login"
+        sendEvent(name: "connectionState", value: STATE_LOGIN_FAILED)
+        scheduleReconnect()
+        return
+    }
+
     String body = "username=${URLEncoder.encode(settings.email, 'UTF-8')}&password=${URLEncoder.encode(settings.password, 'UTF-8')}&grant_type=password&applicationid=${appId}"
     
     Map params = [
@@ -438,7 +455,7 @@ void loginCloud() {
         body: body,
         timeout: 30,
         headers: [
-            "Authorization": state.authBearerToken,
+            "Authorization": authBearerToken,
             "User-Agent": USER_AGENT,
             "Accept": "*/*"
         ]
@@ -449,17 +466,16 @@ void loginCloud() {
             if (resp.status == 200) {
                 def json = resp.data instanceof String ? new JsonSlurper().parseText(resp.data) : resp.data
                 
-                // Extract bearer token
-                state.loginBearerToken = json?.ServerAssignedRoot?.serverAssigned?.security?.userToken?.encoded
-                
-                // Extract the token part (without "Bearer ")
-                if (state.loginBearerToken?.startsWith("Bearer ")) {
-                    state.loginToken = state.loginBearerToken.substring(7)
-                } else if (state.loginBearerToken?.startsWith("bearer ")) {
-                    state.loginToken = state.loginBearerToken.substring(7)
+                String loginBearerToken = json?.ServerAssignedRoot?.serverAssigned?.security?.userToken?.encoded
+                String loginToken = null
+                if (loginBearerToken?.startsWith("Bearer ")) {
+                    loginToken = loginBearerToken.substring(7)
+                } else if (loginBearerToken?.startsWith("bearer ")) {
+                    loginToken = loginBearerToken.substring(7)
                 } else {
-                    state.loginToken = state.loginBearerToken
+                    loginToken = loginBearerToken
                 }
+                getParent()?.storeLoginTokens(device.deviceNetworkId, loginBearerToken, loginToken)
                 
                 // Process homes and systems
                 if (json.readyHomes?.homes) {
@@ -514,8 +530,15 @@ void loginCloud() {
 void negotiateCloud() {
     log.info "Negotiating cloud connection..."
     
+    String loginToken = getCloudTokensFromApp().loginToken
+    if (!loginToken) {
+        log.error "No login token for negotiate"
+        sendEvent(name: "connectionState", value: STATE_LOGIN_FAILED)
+        scheduleReconnect()
+        return
+    }
     String clientId = getClientId()
-    String url = "${CLOUD_NEGOTIATE_URL}?clientProtocol=1.3.0.0&clientId=${URLEncoder.encode(clientId, 'UTF-8')}&Authorization=${URLEncoder.encode(state.loginToken, 'UTF-8')}"
+    String url = "${CLOUD_NEGOTIATE_URL}?clientProtocol=1.3.0.0&clientId=${URLEncoder.encode(clientId, 'UTF-8')}&Authorization=${URLEncoder.encode(loginToken, 'UTF-8')}"
     
     Map params = [
         uri: url,
@@ -591,7 +614,8 @@ void cloudRequestDataSecondary(String sysId) {
 }
 
 void cloudRequestData(String sysId, String jsonPaths) {
-    if (!state.loginBearerToken) {
+    String loginBearerToken = getCloudTokensFromApp().loginBearerToken
+    if (!loginBearerToken) {
         log.error "No bearer token available for cloud request"
         return
     }
@@ -615,7 +639,7 @@ void cloudRequestData(String sysId, String jsonPaths) {
         body: body,
         timeout: 30,
         headers: [
-            "Authorization": state.loginBearerToken,
+            "Authorization": loginBearerToken,
             "User-Agent": USER_AGENT,
             "Accept": "*/*"
         ]
@@ -645,7 +669,9 @@ String getClientId() {
 void disconnectCloud() {
     log.info "Disconnecting from Lennox cloud..."
     
-    if (!state.loginBearerToken) {
+    String loginBearerToken = getCloudTokensFromApp().loginBearerToken
+    if (!loginBearerToken) {
+        getParent()?.clearCloudTokens(device.deviceNetworkId)
         return
     }
     
@@ -655,7 +681,7 @@ void disconnectCloud() {
         contentType: "application/json",
         timeout: 10,
         headers: [
-            "Authorization": state.loginBearerToken,
+            "Authorization": loginBearerToken,
             "User-Agent": USER_AGENT,
             "Accept": "*/*"
         ]
@@ -669,9 +695,7 @@ void disconnectCloud() {
         log.warn "Cloud logout exception: ${e.message}"
     }
     
-    state.loginBearerToken = null
-    state.authBearerToken = null
-    state.loginToken = null
+    getParent()?.clearCloudTokens(device.deviceNetworkId)
 }
 
 // Subscribe to data
@@ -907,6 +931,12 @@ void messagePump() {
         ]
     } else {
         // Cloud connection - no long polling
+        String loginBearerToken = getCloudTokensFromApp().loginBearerToken
+        if (!loginBearerToken) {
+            log.warn "Message pump: no login bearer token, skipping"
+            scheduleNextPoll()
+            return
+        }
         url = CLOUD_RETRIEVE_URL
         params = [
             uri: url,
@@ -919,7 +949,7 @@ void messagePump() {
                 LongPollingTimeout: "0"  // Cloud doesn't support long polling
             ],
             headers: [
-                "Authorization": state.loginBearerToken,
+                "Authorization": loginBearerToken,
                 "User-Agent": USER_AGENT,
                 "Accept": "*/*"
             ],
@@ -947,6 +977,9 @@ void handleMessagePumpResponse(resp, data) {
                 if (json?.messages && json.messages.size() > 0) {
                     List batch = json.messages
                     if (logEnable) log.debug "Retrieve: ${batch.size()} message(s), response size: ${body.size()} chars"
+                    if (body.size() > 50000) {
+                        log.warn "Large Retrieve response (${body.size()} chars, ${batch.size()} message(s)) - processing may be slow. Consider removing unused child devices so RequestData requests less data."
+                    }
                     // Defer processing so we return quickly and schedule the next poll immediately.
                     if (state.pendingMessageBatch != null) {
                         state.queuedMessageBatch = batch
@@ -963,6 +996,8 @@ void handleMessagePumpResponse(resp, data) {
         } else if (resp.status == 401) {
             log.error "Unauthorized - reconnecting..."
             state.connected = false
+            state.pendingMessageBatch = null
+            state.queuedMessageBatch = null
             sendEvent(name: "connectionState", value: STATE_LOGIN_FAILED)
             scheduleReconnect()
             return
@@ -974,6 +1009,8 @@ void handleMessagePumpResponse(resp, data) {
                 if (state.consecutiveRetrieveFailures >= threshold) {
                     log.warn "Local Retrieve failed ${state.consecutiveRetrieveFailures} times (${resp.status}) - reconnecting to restore session"
                     state.connected = false
+                    state.pendingMessageBatch = null
+                    state.queuedMessageBatch = null
                     sendEvent(name: "connectionState", value: STATE_RETRY_WAIT)
                     runIn(5, "connect")
                     return
@@ -996,9 +1033,21 @@ void handleMessagePumpResponse(resp, data) {
 }
 
 void processPendingMessageBatch() {
-    if (!state.connected) return
+    if (!state.connected) {
+        state.pendingMessageBatch = null
+        state.queuedMessageBatch = null
+        return
+    }
     List batch = state.pendingMessageBatch
-    if (!batch) return
+    if (!batch) {
+        state.pendingMessageBatch = null
+        if (state.queuedMessageBatch != null) {
+            state.pendingMessageBatch = state.queuedMessageBatch
+            state.queuedMessageBatch = null
+            runIn(0, "processPendingMessageBatch")
+        }
+        return
+    }
     
     try {
         if (logEnable) log.debug "Processing batch: ${batch.size()} message(s)"
@@ -1011,13 +1060,13 @@ void processPendingMessageBatch() {
         autoCreateChildDevices()
     } catch (Exception e) {
         log.error "Error processing message batch: ${e.message}"
-    }
-    
-    state.pendingMessageBatch = null
-    if (state.queuedMessageBatch != null) {
-        state.pendingMessageBatch = state.queuedMessageBatch
-        state.queuedMessageBatch = null
-        runIn(0, "processPendingMessageBatch")
+    } finally {
+        state.pendingMessageBatch = null
+        if (state.queuedMessageBatch != null) {
+            state.pendingMessageBatch = state.queuedMessageBatch
+            state.queuedMessageBatch = null
+            runIn(0, "processPendingMessageBatch")
+        }
     }
 }
 
@@ -2054,6 +2103,11 @@ void publishMessage(Map data, String additionalParameters = null) {
         ]
     } else {
         // Cloud connection
+        String loginBearerToken = getCloudTokensFromApp().loginBearerToken
+        if (!loginBearerToken) {
+            log.error "Publish: no login bearer token"
+            return
+        }
         url = CLOUD_PUBLISH_URL
         params = [
             uri: url,
@@ -2062,7 +2116,7 @@ void publishMessage(Map data, String additionalParameters = null) {
             body: body,
             timeout: 30,
             headers: [
-                "Authorization": state.loginBearerToken,
+                "Authorization": loginBearerToken,
                 "User-Agent": USER_AGENT,
                 "Accept": "*/*"
             ]
@@ -2317,8 +2371,7 @@ void refreshToken() {
     }
     
     log.info "Refreshing cloud authentication token..."
-    state.loginBearerToken = null
-    state.authBearerToken = null
+    getParent()?.clearCloudTokens(device.deviceNetworkId)
     authenticateCloud()
 }
 
@@ -2525,6 +2578,14 @@ void removeChildDevices() {
     }
     state.childDevicesCreated = false
     state.initialChildCreationDone = false
+}
+
+void clearMessageQueue() {
+    Integer pending = state.pendingMessageBatch != null ? state.pendingMessageBatch.size() : 0
+    Integer queued = state.queuedMessageBatch != null ? state.queuedMessageBatch.size() : 0
+    state.pendingMessageBatch = null
+    state.queuedMessageBatch = null
+    log.info "Message queue cleared (dropped ${pending} pending, ${queued} queued message(s)). Next Retrieve will process normally."
 }
 
 void logsOff() {
