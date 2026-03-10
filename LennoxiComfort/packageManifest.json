@@ -1,13 +1,13 @@
 {
 	"packageName": "Lennox iComfort",
 	"author": "rbyrbt",
-	"version": "1.1.1",
+	"version": "1.1.2",
 	"minimumHEVersion": "2.1.9",
-	"dateReleased": "2026-03-07",
+	"dateReleased": "2026-03-10",
 	"documentationLink": "https://github.com/rbyrbt/Hubitat/blob/main/LennoxiComfort/README.md",
 	"communityLink": "https://community.hubitat.com/t/release-lennox-icomfort-s30/162305",
 	"payPalUrl": "https://ko-fi.com/rbyrbt",
-	"releaseNotes": "Dynamic RequestData: subscribe only to data needed by installed child devices; re-subscribe when children are added or removed. Local LAN: auto-reconnect after repeated 400/408 Retrieve failures to restore session. RequestData path format fixed (was causing 400 on Refresh). Zone child: heating/cooling setpoint updates correctly when changed on thermostat or Lennox app; parent pushes on setpoint-only updates; setpoint derived from F or C when only one present. Zone and sensor children: only send events when values change (avoids Too many events pending).",
+	"releaseNotes": "Added Clear Message Queue to parent device commands. Moved cloud auth to app state per device",
 	"tags": ["Climate Control", "Temperature & Humidity", "Cloud", "LAN"],
 	"apps": [
 		{
