@@ -9,6 +9,7 @@
  *
  *  THIS SOFTWARE IS PROVIDED "AS IS", WITHOUT ANY WARRANTY. THE AUTHORS ARE NOT LIABLE FOR ANY DAMAGES ARISING FROM ITS USE.
  *
+ *  v1.1.2  Tokens/connectionToken and schedules/equipment/diagnostics in app state; message pump watchdog; load optimizations.
  */
 
 import groovy.json.JsonSlurper
@@ -36,6 +37,10 @@ import groovy.transform.Field
 // Poll interval (seconds) during initial discovery; after discovery complete, user-configured interval is used
 @Field static final Integer DISCOVERY_POLL_INTERVAL_LOCAL_SEC = 2
 @Field static final Integer DISCOVERY_POLL_INTERVAL_CLOUD_SEC = 10
+
+// Watchdog: if no Retrieve response within this many seconds, restart poll cycle (Hubitat can drop runIn after long run)
+@Field static final Integer MESSAGE_PUMP_WATCHDOG_INTERVAL_SEC = 300
+@Field static final Integer MESSAGE_PUMP_STALL_THRESHOLD_MULTIPLIER = 3
 
 // Cloud API URLs
 @Field static final String CLOUD_AUTHENTICATE_URL = "https://ic3messaging.myicomfort.com/v1/mobile/authenticate"
@@ -80,7 +85,6 @@ metadata {
         attribute "relayServerConnected", "string"
         attribute "wifiRssi", "number"
         attribute "lastMessageTime", "string"
-        attribute "messageCount", "number"
         
         command "connect"
         command "disconnect"
@@ -129,7 +133,8 @@ metadata {
         input name: "createSwitches", type: "bool", title: "Create Switch Devices", defaultValue: true
         input name: "createDiagnosticSensors", type: "bool", title: "Create Diagnostic Sensor Devices",
               description: "Creates child sensors for equipment diagnostics when diagnostic level is > 0 (can be 40-50 sensors per equipment)", defaultValue: false
-        input name: "logEnable", type: "bool", title: "Enable debug logging", defaultValue: true
+        input name: "logEnable", type: "bool", title: "Enable debug logging", defaultValue: false,
+              description: "Turn on only when troubleshooting; reduces load when off"
         input name: "txtEnable", type: "bool", title: "Enable descriptionText logging", defaultValue: true
     }
 }
@@ -151,11 +156,8 @@ void initialize() {
     log.info "${DRIVER_NAME} initializing..."
     
     state.publishMessageId = 1
-    state.messageCount = 0
     state.fastPollRemaining = 0
     if (!state.zones) state.zones = [:]
-    if (!state.schedules) state.schedules = [:]
-    if (!state.equipment) state.equipment = [:]
     state.systemInitialized = false
     state.zonesDiscovered = false
     
@@ -251,7 +253,6 @@ Map getSystemHealth() {
         outdoorTemperature: state.outdoorTemperature,
         numberOfZones: state.numberOfZones ?: 0,
         wifiRssi: state.wifiRssi,
-        messageCount: state.messageCount ?: 0,
         isLocalConnection: state.isLocalConnection ?: false,
         sysId: state.sysId
     ]
@@ -281,6 +282,7 @@ void connect() {
 void disconnect() {
     log.info "Disconnecting from Lennox system..."
     unschedule("messagePump")
+    unschedule("messagePumpWatchdog")
     unschedule("connect")
     
     if (state.connected) {
@@ -292,7 +294,7 @@ void disconnect() {
     }
     
     state.connected = false
-    state.pendingMessageBatch = null
+    state.activeMessageBatch = null
     state.queuedMessageBatch = null
     sendEvent(name: "connectionState", value: STATE_DISCONNECTED)
 }
@@ -361,6 +363,21 @@ void disconnectLocal() {
 private Map getCloudTokensFromApp() {
     def app = getParent()
     return (app != null ? app.getCloudTokens(device.deviceNetworkId) : null) ?: [:]
+}
+
+private Map getSchedulesFromApp() {
+    def app = getParent()
+    return (app != null ? app.getDeviceSchedules(device.deviceNetworkId) : null) ?: [:]
+}
+
+private Map getEquipmentFromApp() {
+    def app = getParent()
+    return (app != null ? app.getDeviceEquipment(device.deviceNetworkId) : null) ?: [:]
+}
+
+private Map getEquipmentDiagnosticsFromApp() {
+    def app = getParent()
+    return (app != null ? app.getDeviceEquipmentDiagnostics(device.deviceNetworkId) : null) ?: [:]
 }
 
 void connectCloud() {
@@ -556,9 +573,9 @@ void negotiateCloud() {
                 def json = resp.data instanceof String ? new JsonSlurper().parseText(resp.data) : resp.data
                 
                 state.connectionId = json.ConnectionId
-                state.connectionToken = json.ConnectionToken
                 state.tryWebsockets = json.TryWebSockets
                 state.streamUrl = json.Url
+                getParent()?.storeConnectionToken(device.deviceNetworkId, json.ConnectionToken)
                 
                 log.info "Cloud negotiation successful"
                 
@@ -896,6 +913,7 @@ void startMessagePump() {
     
     log.info "Starting message pump..."
     messagePump()
+    runIn(MESSAGE_PUMP_WATCHDOG_INTERVAL_SEC, "messagePumpWatchdog")
 }
 
 void messagePump() {
@@ -957,6 +975,7 @@ void messagePump() {
         ]
     }
     
+    state.lastPollTime = (long)(System.currentTimeMillis() / 1000)
     try {
         asynchttpGet("handleMessagePumpResponse", params)
     } catch (Exception e) {
@@ -967,7 +986,11 @@ void messagePump() {
 
 void handleMessagePumpResponse(resp, data) {
     if (!state.connected) return
-    
+    if (resp == null) {
+        log.warn "Message pump response was null (timeout or hub issue), rescheduling"
+        scheduleNextPoll()
+        return
+    }
     try {
         if (resp.status == 200) {
             state.consecutiveRetrieveFailures = 0
@@ -981,11 +1004,11 @@ void handleMessagePumpResponse(resp, data) {
                         log.warn "Large Retrieve response (${body.size()} chars, ${batch.size()} message(s)) - processing may be slow. Consider removing unused child devices so RequestData requests less data."
                     }
                     // Defer processing so we return quickly and schedule the next poll immediately.
-                    if (state.pendingMessageBatch != null) {
+                    if (state.activeMessageBatch != null) {
                         state.queuedMessageBatch = batch
                     } else {
-                        state.pendingMessageBatch = batch
-                        runIn(0, "processPendingMessageBatch")
+                        state.activeMessageBatch = batch
+                        runIn(0, "processActiveMessageBatch")
                     }
                 }
             }
@@ -996,7 +1019,7 @@ void handleMessagePumpResponse(resp, data) {
         } else if (resp.status == 401) {
             log.error "Unauthorized - reconnecting..."
             state.connected = false
-            state.pendingMessageBatch = null
+            state.activeMessageBatch = null
             state.queuedMessageBatch = null
             sendEvent(name: "connectionState", value: STATE_LOGIN_FAILED)
             scheduleReconnect()
@@ -1009,7 +1032,7 @@ void handleMessagePumpResponse(resp, data) {
                 if (state.consecutiveRetrieveFailures >= threshold) {
                     log.warn "Local Retrieve failed ${state.consecutiveRetrieveFailures} times (${resp.status}) - reconnecting to restore session"
                     state.connected = false
-                    state.pendingMessageBatch = null
+                    state.activeMessageBatch = null
                     state.queuedMessageBatch = null
                     sendEvent(name: "connectionState", value: STATE_RETRY_WAIT)
                     runIn(5, "connect")
@@ -1027,24 +1050,24 @@ void handleMessagePumpResponse(resp, data) {
         }
     } catch (Exception e) {
         log.error "Error processing message pump response: ${e.message}"
+    } finally {
+        if (state.connected) scheduleNextPoll()
     }
-    
-    scheduleNextPoll()
 }
 
-void processPendingMessageBatch() {
+void processActiveMessageBatch() {
     if (!state.connected) {
-        state.pendingMessageBatch = null
+        state.activeMessageBatch = null
         state.queuedMessageBatch = null
         return
     }
-    List batch = state.pendingMessageBatch
+    List batch = state.activeMessageBatch
     if (!batch) {
-        state.pendingMessageBatch = null
+        state.activeMessageBatch = null
         if (state.queuedMessageBatch != null) {
-            state.pendingMessageBatch = state.queuedMessageBatch
+            state.activeMessageBatch = state.queuedMessageBatch
             state.queuedMessageBatch = null
-            runIn(0, "processPendingMessageBatch")
+            runIn(0, "processActiveMessageBatch")
         }
         return
     }
@@ -1054,18 +1077,21 @@ void processPendingMessageBatch() {
         batch.each { message ->
             processMessage(message)
         }
-        state.messageCount = (state.messageCount ?: 0) + batch.size()
-        sendEvent(name: "messageCount", value: state.messageCount)
-        sendEvent(name: "lastMessageTime", value: new Date().format("yyyy-MM-dd HH:mm:ss"))
-        autoCreateChildDevices()
+        Long nowSec = (long)(System.currentTimeMillis() / 1000)
+        Long lastSent = state.lastMessageTimeEventSent ?: 0L
+        if (nowSec - lastSent >= 60) {
+            sendEvent(name: "lastMessageTime", value: new Date().format("yyyy-MM-dd HH:mm:ss"))
+            state.lastMessageTimeEventSent = nowSec
+        }
+        if (!state.initialChildCreationDone) autoCreateChildDevices()
     } catch (Exception e) {
         log.error "Error processing message batch: ${e.message}"
     } finally {
-        state.pendingMessageBatch = null
+        state.activeMessageBatch = null
         if (state.queuedMessageBatch != null) {
-            state.pendingMessageBatch = state.queuedMessageBatch
+            state.activeMessageBatch = state.queuedMessageBatch
             state.queuedMessageBatch = null
-            runIn(0, "processPendingMessageBatch")
+            runIn(0, "processActiveMessageBatch")
         }
     }
 }
@@ -1073,19 +1099,39 @@ void processPendingMessageBatch() {
 void scheduleNextPoll() {
     if (!state.connected) return
     
-    Integer interval
     if (state.fastPollRemaining > 0) {
         state.fastPollRemaining = state.fastPollRemaining - 1
-        interval = ((settings.fastPollInterval ?: 0.75) * 1000).toInteger()
-        runInMillis(interval, "messagePump")
+        Integer intervalMs = ((settings.fastPollInterval ?: 0.75) * 1000).toInteger()
+        if (intervalMs < 500) intervalMs = 500
+        runInMillis(intervalMs, "messagePump")
     } else if (!isDiscoveryComplete()) {
-        // Faster polling during initial setup until zones/children are discovered
-        interval = state.isLocalConnection ? DISCOVERY_POLL_INTERVAL_LOCAL_SEC : DISCOVERY_POLL_INTERVAL_CLOUD_SEC
-        runIn(interval, "messagePump")
+        Integer intervalSec = state.isLocalConnection ? DISCOVERY_POLL_INTERVAL_LOCAL_SEC : DISCOVERY_POLL_INTERVAL_CLOUD_SEC
+        runIn(intervalSec, "messagePump")
     } else {
-        interval = (settings.pollInterval ?: (state.isLocalConnection ? "30" : "60")).toInteger()
-        runIn(interval, "messagePump")
+        Integer intervalSec = (settings.pollInterval ?: (state.isLocalConnection ? "30" : "60")).toInteger()
+        if (intervalSec < 10) intervalSec = 10
+        runIn(intervalSec, "messagePump")
     }
+}
+
+void messagePumpWatchdog() {
+    if (!state.connected) return
+    Long now = (long)(System.currentTimeMillis() / 1000)
+    Long last = state.lastPollTime
+    if (last == null) {
+        state.lastPollTime = now
+        runIn(MESSAGE_PUMP_WATCHDOG_INTERVAL_SEC, "messagePumpWatchdog")
+        return
+    }
+    Integer pollIntervalSec = (settings.pollInterval ?: (state.isLocalConnection ? "30" : "60")).toInteger()
+    if (pollIntervalSec < 10) pollIntervalSec = 10
+    Integer stallThreshold = pollIntervalSec * MESSAGE_PUMP_STALL_THRESHOLD_MULTIPLIER
+    if (stallThreshold < 120) stallThreshold = 120
+    if ((now - last) > stallThreshold) {
+        log.warn "Message pump may have stalled (no response in ${now - last}s), restarting poll cycle"
+        scheduleNextPoll()
+    }
+    runIn(MESSAGE_PUMP_WATCHDOG_INTERVAL_SEC, "messagePumpWatchdog")
 }
 
 void scheduleReconnect() {
@@ -1367,8 +1413,8 @@ void processSchedulesMessage(List schedules) {
         if (schedule.schedule) {
             Map sched = schedule.schedule
             if (sched.name) {
-                if (!state.schedules) state.schedules = [:]
-                state.schedules[scheduleId.toString()] = [
+                Map schedMap = getSchedulesFromApp()
+                schedMap[scheduleId.toString()] = [
                     id: scheduleId,
                     name: sched.name
                 ]
@@ -1423,13 +1469,14 @@ void processDevicesMessage(List devices) {
 }
 
 void processEquipmentsMessage(List equipments) {
+    Map equipmentMap = getEquipmentFromApp()
+    Map diagMap = getEquipmentDiagnosticsFromApp()
     equipments.each { equipment ->
         Integer equipmentId = equipment.id
-        if (!state.equipment) state.equipment = [:]
-        if (!state.equipment[equipmentId.toString()]) {
-            state.equipment[equipmentId.toString()] = [id: equipmentId]
+        if (!equipmentMap[equipmentId.toString()]) {
+            equipmentMap[equipmentId.toString()] = [id: equipmentId]
         }
-        Map eqState = state.equipment[equipmentId.toString()]
+        Map eqState = equipmentMap[equipmentId.toString()]
         
         if (equipment.equipment) {
             Map eq = equipment.equipment
@@ -1459,11 +1506,10 @@ void processEquipmentsMessage(List equipments) {
                     Map diag = diagEntry.diagnostic
                     String key = "${equipmentId}_${diagId}"
                     
-                    if (!state.equipmentDiagnostics) state.equipmentDiagnostics = [:]
-                    if (!state.equipmentDiagnostics[key]) {
-                        state.equipmentDiagnostics[key] = [equipmentId: equipmentId, diagId: diagId]
+                    if (!diagMap[key]) {
+                        diagMap[key] = [equipmentId: equipmentId, diagId: diagId]
                     }
-                    Map diagState = state.equipmentDiagnostics[key]
+                    Map diagState = diagMap[key]
                     
                     if (diag.name) diagState.name = diag.name
                     if (diag.unit) diagState.unit = diag.unit
@@ -1614,8 +1660,8 @@ void createOrUpdateZoneThermostat(Integer zoneId, Map zoneState) {
     }
     
     // Resolve schedule name from stored schedules
-    if (zoneState.scheduleId != null && state.schedules) {
-        Map sched = state.schedules[zoneState.scheduleId.toString()]
+    if (zoneState.scheduleId != null) {
+        Map sched = getSchedulesFromApp()[zoneState.scheduleId.toString()]
         if (sched?.name) {
             zoneState.scheduleName = sched.name
         }
@@ -1849,7 +1895,7 @@ void updateSensorDevice(String sensorType, Map data) {
 }
 
 void updateDiagnosticSensor(Integer equipmentId, Integer diagId, Map diagState) {
-    String eqName = state.equipment?.get(equipmentId.toString())?.equipmentTypeName ?: "Equipment ${equipmentId}"
+    String eqName = getEquipmentFromApp()?.get(equipmentId.toString())?.equipmentTypeName ?: "Equipment ${equipmentId}"
     String diagName = diagState.name
     String sensorKey = "diag-${equipmentId}-${diagId}"
     String dni = "${device.deviceNetworkId}-sensor-${sensorKey}"
@@ -1980,10 +2026,11 @@ Map getChildDeviceInventory() {
         ]
     }
 
-    state.equipmentDiagnostics?.each { diagKey, diagState ->
+    Map equipment = getEquipmentFromApp()
+    getEquipmentDiagnosticsFromApp()?.each { diagKey, diagState ->
         Integer eqId = diagState.equipmentId
         Integer diagId = diagState.diagId
-        String eqName = state.equipment?.get(eqId.toString())?.equipmentTypeName ?: "Equipment ${eqId}"
+        String eqName = equipment?.get(eqId.toString())?.equipmentTypeName ?: "Equipment ${eqId}"
         String sensorKey = "diag-${eqId}-${diagId}"
         String dni = "${baseDni}-sensor-${sensorKey}"
         inventory.diagnostics << [
@@ -2019,7 +2066,7 @@ void createDeviceByKey(String key) {
             Integer eqId = parts[0].toInteger()
             Integer diagId = parts[1].toInteger()
             String diagKey = "${eqId}_${diagId}"
-            Map diagState = state.equipmentDiagnostics?.get(diagKey)
+            Map diagState = getEquipmentDiagnosticsFromApp()?.get(diagKey)
             if (diagState) updateDiagnosticSensor(eqId, diagId, diagState)
         }
     } else if (key.startsWith("sensor-ble-")) {
@@ -2342,18 +2389,20 @@ void setEquipmentParameter(BigDecimal equipId, BigDecimal paramId, String value)
 }
 
 void getEquipmentDiagnostics() {
+    Map equipment = getEquipmentFromApp()
+    Map equipmentDiagnostics = getEquipmentDiagnosticsFromApp()
     log.info "Equipment Diagnostics:"
-    state.equipment?.each { equipId, equipState ->
+    equipment?.each { equipId, equipState ->
         log.info "  Equipment ${equipId}: ${equipState.equipmentTypeName ?: equipState.equipType}"
         log.info "    Model: ${equipState.unitModelNumber ?: 'N/A'}"
         log.info "    Serial: ${equipState.unitSerialNumber ?: 'N/A'}"
     }
     
-    if (state.equipmentDiagnostics) {
-        Integer count = state.equipmentDiagnostics.size()
+    if (equipmentDiagnostics) {
+        Integer count = equipmentDiagnostics.size()
         log.info "Live Diagnostic Readings (${count} sensors):"
-        state.equipmentDiagnostics.each { key, diagState ->
-            String eqName = state.equipment?.get(diagState.equipmentId?.toString())?.equipmentTypeName ?: "Eq ${diagState.equipmentId}"
+        equipmentDiagnostics.each { key, diagState ->
+            String eqName = equipment?.get(diagState.equipmentId?.toString())?.equipmentTypeName ?: "Eq ${diagState.equipmentId}"
             String valueStr = diagState.value != null ? "${diagState.value}" : "N/A"
             if (diagState.unit) valueStr += " ${diagState.unit}"
             String validStr = diagState.valid == false ? " [INVALID]" : ""
@@ -2581,11 +2630,11 @@ void removeChildDevices() {
 }
 
 void clearMessageQueue() {
-    Integer pending = state.pendingMessageBatch != null ? state.pendingMessageBatch.size() : 0
+    Integer active = state.activeMessageBatch != null ? state.activeMessageBatch.size() : 0
     Integer queued = state.queuedMessageBatch != null ? state.queuedMessageBatch.size() : 0
-    state.pendingMessageBatch = null
+    state.activeMessageBatch = null
     state.queuedMessageBatch = null
-    log.info "Message queue cleared (dropped ${pending} pending, ${queued} queued message(s)). Next Retrieve will process normally."
+    log.info "Message queue cleared (dropped ${active} active, ${queued} queued message(s)). Next Retrieve will process normally."
 }
 
 void logsOff() {

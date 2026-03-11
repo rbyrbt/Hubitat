@@ -14,6 +14,7 @@
  *
  *  v1.1.0   03-07-26   Initial release
  *  v1.1.1   03-09-26   RequestData improvements
+ *  v1.1.2   03-10-26   Tokens and device data in app state (not on device list); message pump watchdog; load optimizations
  *
  */
 
@@ -317,7 +318,6 @@ def manageSystemPage(params) {
             String outdoorTemp = dev.currentValue("outdoorTemperature")
             String zones = dev.currentValue("numberOfZones") ?: "?"
             String wifiRssi = dev.currentValue("wifiRssi")
-            String msgCount = dev.currentValue("messageCount") ?: "0"
             String lastMsg = dev.currentValue("lastMessageTime") ?: "Never"
 
             section("<b>System Information</b>") {
@@ -331,7 +331,6 @@ def manageSystemPage(params) {
                 paragraph "<b>Outdoor Temperature:</b> ${outdoorTemp != null ? outdoorTemp + '°' : 'N/A'}"
                 paragraph "<b>Zones:</b> ${zones}"
                 paragraph "<b>WiFi RSSI:</b> ${wifiRssi != null ? wifiRssi + ' dBm' : 'N/A'}"
-                paragraph "<b>Messages Received:</b> ${msgCount}"
                 paragraph "<b>Last Message:</b> ${lastMsg}"
             }
 
@@ -639,7 +638,7 @@ String createLennoxDevice() {
 
 // ---------------------------------------------------------------------------
 // Cloud token storage (per device; not stored on device so not visible in State Variables)
-// Keys: authBearerToken, loginBearerToken, loginToken
+// Keys: authBearerToken, loginBearerToken, loginToken, connectionToken
 // ---------------------------------------------------------------------------
 
 Map getCloudTokens(String deviceId) {
@@ -665,10 +664,57 @@ void storeLoginTokens(String deviceId, String loginBearerToken, String loginToke
     state.cloudTokens[deviceId] = t
 }
 
+void storeConnectionToken(String deviceId, String connectionToken) {
+    if (!deviceId) return
+    if (!state.cloudTokens) state.cloudTokens = [:]
+    Map t = (state.cloudTokens[deviceId] ?: [:]) as Map
+    t.connectionToken = connectionToken
+    state.cloudTokens[deviceId] = t
+}
+
 void clearCloudTokens(String deviceId) {
     if (!deviceId) return
     if (state.cloudTokens != null && state.cloudTokens.containsKey(deviceId)) {
         state.cloudTokens.remove(deviceId)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Device data (schedules, equipment, equipmentDiagnostics) - per device in app state
+// so they are not shown in device State Variables on device/list
+// ---------------------------------------------------------------------------
+
+private Map ensureDeviceData(String deviceId) {
+    if (!deviceId) return [:]
+    if (!state.deviceData) state.deviceData = [:]
+    if (!state.deviceData[deviceId]) {
+        state.deviceData[deviceId] = [schedules: [:], equipment: [:], equipmentDiagnostics: [:]]
+    }
+    return (state.deviceData[deviceId] ?: [:]) as Map
+}
+
+Map getDeviceSchedules(String deviceId) {
+    Map data = ensureDeviceData(deviceId)
+    if (!data.schedules) data.schedules = [:]
+    return (data.schedules ?: [:]) as Map
+}
+
+Map getDeviceEquipment(String deviceId) {
+    Map data = ensureDeviceData(deviceId)
+    if (!data.equipment) data.equipment = [:]
+    return (data.equipment ?: [:]) as Map
+}
+
+Map getDeviceEquipmentDiagnostics(String deviceId) {
+    Map data = ensureDeviceData(deviceId)
+    if (!data.equipmentDiagnostics) data.equipmentDiagnostics = [:]
+    return (data.equipmentDiagnostics ?: [:]) as Map
+}
+
+void clearDeviceData(String deviceId) {
+    if (!deviceId) return
+    if (state.deviceData != null && state.deviceData.containsKey(deviceId)) {
+        state.deviceData.remove(deviceId)
     }
 }
 
@@ -714,6 +760,7 @@ void removeSystem(String deviceId) {
     log.info "Removing Lennox system: ${dev.label}"
 
     clearCloudTokens(deviceId)
+    clearDeviceData(deviceId)
 
     try {
         // Disconnect first

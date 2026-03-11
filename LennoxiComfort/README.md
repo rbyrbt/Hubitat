@@ -185,9 +185,9 @@ Note: a power outage resets the diagnostic level to 0. If you need diagnostics t
 
 ### Data Not Updating
 
-- Verify Poll Interval is set appropriately
-- Check if the message pump is running (look for messageCount increasing)
-- Try the refresh command or the Refresh button in the app
+- Verify Poll Interval is set appropriately (30s local / 60s cloud recommended)
+- A built-in watchdog restarts the message pump if it stalls (e.g. after many hours); wait a few minutes or use Refresh to force an immediate poll
+- Try the Refresh command or the Refresh button in the app
 
 ## Technical Details
 

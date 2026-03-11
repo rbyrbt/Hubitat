@@ -7,7 +7,7 @@
 	"documentationLink": "https://github.com/rbyrbt/Hubitat/blob/main/LennoxiComfort/README.md",
 	"communityLink": "https://community.hubitat.com/t/release-lennox-icomfort-s30/162305",
 	"payPalUrl": "https://ko-fi.com/rbyrbt",
-	"releaseNotes": "Added Clear Message Queue to parent device commands. Moved cloud auth to app state per device",
+	"releaseNotes": "v1.1.2: Cloud tokens, connection token, and schedules/equipment/diagnostics stored in app state (no longer on device State Variables). Message pump watchdog recovers from stalls after long runs. Clear Message Queue command. Debug logging off by default; throttled lastMessageTime; other load optimizations.",
 	"tags": ["Climate Control", "Temperature & Humidity", "Cloud", "LAN"],
 	"apps": [
 		{
