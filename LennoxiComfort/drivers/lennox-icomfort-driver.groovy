@@ -10,6 +10,7 @@
  *  THIS SOFTWARE IS PROVIDED "AS IS", WITHOUT ANY WARRANTY. THE AUTHORS ARE NOT LIABLE FOR ANY DAMAGES ARISING FROM ITS USE.
  *
  *  v1.1.2  Tokens/connectionToken and schedules/equipment/diagnostics in app state; message pump watchdog; load optimizations.
+ *  v1.1.3  Cloud: stop requesting full schedules to reduce Retrieve payload. Zone schedule preset dropdown (No Schedule, Schedule IQ, Save Energy, Heat Only, Cool Only, Schedule)—work in progress.
  */
 
 import groovy.json.JsonSlurper
@@ -605,7 +606,7 @@ void subscribeCloud(Set<String> pathGroups) {
     String cloudPaths1, cloudPaths2
     if (pathGroups == null) {
         if (logEnable) log.debug "RequestData mode: discovery (full paths for initial setup)"
-        cloudPaths1 = "1;/zones;/occupancy;/schedules;/reminderSensors;/reminders;/alerts/active;"
+        cloudPaths1 = "1;/zones;/occupancy;/reminderSensors;/reminders;/alerts/active;"
         cloudPaths2 = "1;/alerts/meta;/dealers;/devices;/equipments;/system;/fwm;/ocst;"
     } else {
         if (logEnable) log.debug "RequestData mode: dynamic | path groups: ${pathGroups.sort().join(', ')}"
@@ -771,7 +772,7 @@ void resubscribeForChildDevices() {
         String cloudPaths1, cloudPaths2
         if (pathGroups == null) {
             if (logEnable) log.debug "Re-subscribe RequestData mode: discovery"
-            cloudPaths1 = "1;/zones;/occupancy;/schedules;/reminderSensors;/reminders;/alerts/active;"
+            cloudPaths1 = "1;/zones;/occupancy;/reminderSensors;/reminders;/alerts/active;"
             cloudPaths2 = "1;/alerts/meta;/dealers;/devices;/equipments;/system;/fwm;/ocst;"
         } else {
             if (logEnable) log.debug "Re-subscribe RequestData mode: dynamic | path groups: ${pathGroups.sort().join(', ')}"
@@ -889,7 +890,9 @@ String buildLocalPaths2(Set<String> pathGroups) {
 }
 
 String buildCloudPaths1(Set<String> pathGroups) {
-    List<String> p = ["1", "zones", "schedules", "reminderSensors", "reminders"]
+    // Omit "schedules" - cloud returns full schedule list (48 schedules × 28 periods) and blows up payload;
+    // we get schedule name from zone.schedule.name in processZonesMessage instead.
+    List<String> p = ["1", "zones", "reminderSensors", "reminders"]
     if (pathGroups.contains("occupancy")) p << "occupancy"
     if (pathGroups.contains("alerts")) p << "alerts/active"
     return toJsonPathString(p)
@@ -1396,6 +1399,7 @@ void processZonesMessage(List zones) {
         if (zone.desp != null) zoneState.desp = zone.desp
         if (zone.scheduleName != null) zoneState.scheduleName = zone.scheduleName
         if (zone.scheduleId != null) zoneState.scheduleId = zone.scheduleId
+        if (zone.schedule?.name) zoneState.scheduleName = zone.schedule.name
         if (zone.name != null) zoneState.name = zone.name
         
         // Create or update child thermostat device when we have name and enough data to display (temp or setpoints)
@@ -1671,6 +1675,34 @@ void createOrUpdateZoneThermostat(Integer zoneId, Map zoneState) {
     if (child) {
         child.updateZoneState(zoneState, state.singleSetpointMode ?: false)
     }
+}
+
+// Lennox app exposes exactly 6 schedule presets; IDs match typical system (manual = 16+zoneId per zone).
+void setZoneScheduleByPresetName(Integer zoneId, String presetName) {
+    if (!presetName?.trim()) return
+    String key = presetName.trim()
+    Integer scheduleId
+    if (key == "No Schedule") {
+        scheduleId = 16 + zoneId  // manual zone N
+    } else {
+        Map presetIds = [
+            "Schedule IQ": 0,
+            "Schedule": 1,
+            "Cool Only": 2,
+            "Heat Only": 3,
+            "Save Energy": 4
+        ]
+        scheduleId = presetIds[key]
+    }
+    if (scheduleId == null) {
+        log.warn "Unknown schedule preset: ${presetName}. Use: No Schedule, Schedule IQ, Save Energy, Heat Only, Cool Only, Schedule"
+        return
+    }
+    setZoneSchedule(zoneId, scheduleId)
+    // Update child display immediately so Schedule Name and Schedule Preset reflect the change before next poll
+    String dni = "${device.deviceNetworkId}-zone-${zoneId}"
+    def child = getChildDevice(dni)
+    if (child) child.updateScheduleDisplay(key)
 }
 
 void updateAwayModeSwitches() {

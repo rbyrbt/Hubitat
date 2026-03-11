@@ -8,6 +8,8 @@
  *
  *  THIS SOFTWARE IS PROVIDED "AS IS", WITHOUT ANY WARRANTY. THE AUTHORS ARE NOT LIABLE FOR ANY DAMAGES ARISING FROM ITS USE.
  *
+ *  v1.1.3  Schedule preset attribute and setSchedulePreset command (WIP).
+ *
  */
 
 import groovy.transform.Field
@@ -71,6 +73,7 @@ metadata {
         attribute "demand", "number"
         attribute "scheduleId", "number"
         attribute "scheduleName", "string"
+        attribute "schedulePreset", "enum", ["No Schedule", "Schedule IQ", "Save Energy", "Heat Only", "Cool Only", "Schedule"]
         attribute "overrideActive", "string"
         attribute "zoneEnabled", "string"
         attribute "allergenDefender", "string"
@@ -82,6 +85,7 @@ metadata {
         command "setHumidifySetpoint", [[name: "setpoint", type: "NUMBER", description: "Humidity setpoint %"]]
         command "setDehumidifySetpoint", [[name: "setpoint", type: "NUMBER", description: "Dehumidity setpoint %"]]
         command "setSchedule", [[name: "scheduleId", type: "NUMBER", description: "Schedule ID"]]
+        command "setSchedulePreset", [[name: "presetName", type: "ENUM", constraints: ["No Schedule", "Schedule IQ", "Save Energy", "Heat Only", "Cool Only", "Schedule"]]]
         command "resumeSchedule"
     }
     
@@ -173,7 +177,25 @@ void updateZoneState(Map zoneState, Boolean singleSetpointMode) {
     if (zoneState.damper != null) sendEventIfChanged("damper", zoneState.damper, "%")
     if (zoneState.demand != null) sendEventIfChanged("demand", zoneState.demand)
     if (zoneState.scheduleId != null) sendEventIfChanged("scheduleId", zoneState.scheduleId)
-    if (zoneState.scheduleName) sendEventIfChanged("scheduleName", zoneState.scheduleName)
+    // Skip overwriting schedule display if we just set it from preset (cloud may not have returned new state yet)
+    Long lastSet = state.lastSchedulePresetSet ?: 0L
+    if (now() - lastSet > 25000) {
+        state.remove("lastSchedulePresetSet")
+        Integer zoneId = getZoneId()
+        Integer manualScheduleId = 16 + zoneId
+        String displayName
+        if (zoneState.scheduleId != null && zoneState.scheduleId == manualScheduleId) {
+            displayName = "No Schedule"
+        } else if (zoneState.scheduleName) {
+            displayName = apiScheduleNameToPreset(zoneState.scheduleName)
+        } else {
+            displayName = null
+        }
+        if (displayName) {
+            sendEventIfChanged("scheduleName", displayName)
+            sendEventIfChanged("schedulePreset", displayName)
+        }
+    }
     if (zoneState.allergenDefender != null) sendEventIfChanged("allergenDefender", zoneState.allergenDefender.toString())
     if (zoneState.ventilation != null) sendEventIfChanged("ventilation", zoneState.ventilation.toString())
     updateSupportedModes(zoneState)
@@ -425,6 +447,24 @@ void setSchedule(BigDecimal scheduleId) {
     parent?.setZoneSchedule(zoneId, scheduleId.intValue())
 }
 
+void setSchedulePreset(String presetName) {
+    if (logEnable) log.debug "setSchedulePreset: ${presetName}"
+    
+    if (!presetName?.trim()) return
+    String name = presetName.trim()
+    Integer zoneId = getZoneId()
+    parent?.setZoneScheduleByPresetName(zoneId, name)
+    updateScheduleDisplay(name)
+}
+
+/** Called by parent or after setSchedulePreset to update Schedule Name and Schedule Preset so UI reflects the change immediately. */
+void updateScheduleDisplay(String presetName) {
+    if (!presetName) return
+    state.lastSchedulePresetSet = now()
+    sendEvent(name: "scheduleName", value: presetName, descriptionText: "${device.displayName} schedule is ${presetName}")
+    sendEvent(name: "schedulePreset", value: presetName, descriptionText: "${device.displayName} schedule preset is ${presetName}")
+}
+
 void resumeSchedule() {
     if (logEnable) log.debug "resumeSchedule"
     
@@ -436,6 +476,19 @@ void resumeSchedule() {
 }
 
 // Helper methods
+/** Map API schedule name (e.g. "manual zone 0", "schedule IQ") to the 6 Lennox-app preset display names. */
+private static String apiScheduleNameToPreset(String apiName) {
+    if (!apiName) return "No Schedule"
+    String lower = apiName.toLowerCase().trim()
+    if (lower.startsWith("manual zone")) return "No Schedule"
+    if (lower == "schedule iq") return "Schedule IQ"
+    if (lower == "save energy") return "Save Energy"
+    if (lower == "heat only") return "Heat Only"
+    if (lower == "cool only") return "Cool Only"
+    if (lower == "schedule") return "Schedule"
+    return apiName
+}
+
 Integer getZoneId() {
     String zoneIdStr = device.getDataValue("zoneId")
     return zoneIdStr ? zoneIdStr.toInteger() : 0
