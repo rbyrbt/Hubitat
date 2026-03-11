@@ -975,7 +975,7 @@ void messagePump() {
         ]
     }
     
-    state.lastPollTime = (long)(System.currentTimeMillis() / 1000)
+    state.lastPollTime = (long)(new Date().time / 1000)
     try {
         asynchttpGet("handleMessagePumpResponse", params)
     } catch (Exception e) {
@@ -1077,7 +1077,7 @@ void processActiveMessageBatch() {
         batch.each { message ->
             processMessage(message)
         }
-        Long nowSec = (long)(System.currentTimeMillis() / 1000)
+        Long nowSec = (long)(new Date().time / 1000)
         Long lastSent = state.lastMessageTimeEventSent ?: 0L
         if (nowSec - lastSent >= 60) {
             sendEvent(name: "lastMessageTime", value: new Date().format("yyyy-MM-dd HH:mm:ss"))
@@ -1116,7 +1116,7 @@ void scheduleNextPoll() {
 
 void messagePumpWatchdog() {
     if (!state.connected) return
-    Long now = (long)(System.currentTimeMillis() / 1000)
+    Long now = (long)(new Date().time / 1000)
     Long last = state.lastPollTime
     if (last == null) {
         state.lastPollTime = now
