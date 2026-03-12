@@ -16,6 +16,7 @@
  *  v1.1.1   03-09-26   RequestData improvements
  *  v1.1.2   03-10-26   Tokens and device data in app state (not on device list); message pump watchdog; load optimizations
  *  v1.1.3   03-11-26   Cloud payload reduction (no full schedules); zone schedule presets (WIP)
+ *  v1.1.4   03-11-26   Local LAN reliability fixes (lean RequestData paths, queue handling, setpoint compatibility)
  *
  */
 

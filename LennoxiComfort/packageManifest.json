@@ -1,13 +1,13 @@
 {
 	"packageName": "Lennox iComfort",
 	"author": "rbyrbt",
-	"version": "1.1.3",
+	"version": "1.1.4",
 	"minimumHEVersion": "2.1.9",
 	"dateReleased": "2026-03-11",
 	"documentationLink": "https://github.com/rbyrbt/Hubitat/blob/main/LennoxiComfort/README.md",
 	"communityLink": "https://community.hubitat.com/t/release-lennox-icomfort-s30/162305",
 	"payPalUrl": "https://ko-fi.com/rbyrbt",
-	"releaseNotes": "v1.1.3: Cloud Retrieve no longer requests full schedules (smaller payload). Zone thermostat schedule preset dropdown (No Schedule, Schedule IQ, Save Energy, Heat Only, Cool Only, Schedule)—work in progress. v1.1.2: App-state tokens, message pump watchdog, load optimizations.",
+	"releaseNotes": "v1.1.4: Local LAN reliability fixes for RequestData and updates (lean discovery/dynamic paths, stale queue mitigation via Retrieve StartTime, and improved setpoint command compatibility). v1.1.3: Cloud Retrieve no longer requests full schedules; schedule preset dropdown remains work in progress. v1.1.2: App-state tokens, message pump watchdog, load optimizations.",
 	"tags": ["Climate Control", "Temperature & Humidity", "Cloud", "LAN"],
 	"apps": [
 		{

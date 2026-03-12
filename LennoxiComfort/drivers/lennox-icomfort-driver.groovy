@@ -11,6 +11,7 @@
  *
  *  v1.1.2  Tokens/connectionToken and schedules/equipment/diagnostics in app state; message pump watchdog; load optimizations.
  *  v1.1.3  Cloud: stop requesting full schedules to reduce Retrieve payload. Zone schedule preset dropdown (No Schedule, Schedule IQ, Save Energy, Heat Only, Cool Only, Schedule)—work in progress.
+ *  v1.1.4  Local LAN reliability fixes: lean discovery/dynamic RequestData paths, stale-queue mitigation for Retrieve StartTime, and setpoint command compatibility improvements.
  */
 
 import groovy.json.JsonSlurper
@@ -322,6 +323,8 @@ void connectLocal() {
                 state.connected = true
                 state.isLocalConnection = true
                 state.appId = appId
+                // Start retrieval from "now" for this session to avoid replaying stale backlog.
+                state.retrieveStartTimeSec = ((long)(new Date().time / 1000) - 2)
                 state.consecutiveRetrieveFailures = 0
                 resetReconnectBackoff()
                 sendEvent(name: "connectionState", value: STATE_CONNECTED)
@@ -581,6 +584,7 @@ void negotiateCloud() {
                 log.info "Cloud negotiation successful"
                 
                 state.connected = true
+                state.retrieveStartTimeSec = ((long)(new Date().time / 1000) - 2)
                 resetReconnectBackoff()
                 sendEvent(name: "connectionState", value: STATE_CONNECTED)
                 
@@ -727,47 +731,37 @@ void subscribe() {
     Set<String> pathGroups = getRequiredPathGroups()
     
     if (state.isLocalConnection) {
-        String paths1, paths2
+        String paths1
         if (pathGroups == null) {
-            if (logEnable) log.debug "RequestData mode: discovery (full paths for initial setup)"
-            paths1 = "1;/systemControl;/systemController;/reminderSensors;/reminders;/alerts/active;/alerts/meta;/bleProvisionDB;/ble;/indoorAirQuality;/fwm;/rgw;/devices;/zones;/equipments;/schedules;/occupancy;/system"
-            paths2 = "1;/automatedTest;/zoneTestControl;/homes;/reminders;/algorithm;/historyReportFileDetails;/interfaces;/logs"
+            if (logEnable) log.debug "RequestData mode: discovery (lean paths for initial setup)"
+            // Keep bootstrap lightweight so zone/system state arrives quickly and child creation doesn't stall.
+            paths1 = "1;/zones;/system;/devices;"
         } else {
             if (logEnable) log.debug "RequestData mode: dynamic | path groups: ${pathGroups.sort().join(', ')}"
             paths1 = buildLocalPaths1(pathGroups)
-            paths2 = buildLocalPaths2(pathGroups)
             if (logEnable) log.debug "RequestData paths1: ${paths1}"
-            if (logEnable) log.debug "RequestData paths2: ${paths2}"
         }
         requestData(paths1)
-        runIn(2, "requestDataSecondary", [data: paths2])
         runIn(3, "startMessagePump")
     } else {
         subscribeCloud(pathGroups)
     }
 }
 
-void requestDataSecondary(String paths) {
-    requestData(paths)
-}
-
 void resubscribeForChildDevices() {
     if (!state.connected) return
     Set<String> pathGroups = getRequiredPathGroups()
     if (state.isLocalConnection) {
-        String paths1, paths2
+        String paths1
         if (pathGroups == null) {
-            if (logEnable) log.debug "Re-subscribe RequestData mode: discovery"
-            paths1 = "1;/systemControl;/systemController;/reminderSensors;/reminders;/alerts/active;/alerts/meta;/bleProvisionDB;/ble;/indoorAirQuality;/fwm;/rgw;/devices;/zones;/equipments;/schedules;/occupancy;/system"
-            paths2 = "1;/automatedTest;/zoneTestControl;/homes;/reminders;/algorithm;/historyReportFileDetails;/interfaces;/logs"
+            if (logEnable) log.debug "Re-subscribe RequestData mode: discovery (lean)"
+            paths1 = "1;/zones;/system;/devices;"
         } else {
             if (logEnable) log.debug "Re-subscribe RequestData mode: dynamic | path groups: ${pathGroups.sort().join(', ')}"
             paths1 = buildLocalPaths1(pathGroups)
-            paths2 = buildLocalPaths2(pathGroups)
-            if (logEnable) log.debug "Re-subscribe RequestData paths1: ${paths1} | paths2: ${paths2}"
+            if (logEnable) log.debug "Re-subscribe RequestData paths1: ${paths1}"
         }
         requestData(paths1)
-        runIn(2, "requestDataSecondary", [data: paths2])
     } else {
         String cloudPaths1, cloudPaths2
         if (pathGroups == null) {
@@ -849,15 +843,24 @@ Set<String> getInstalledChildKeys() {
 Set<String> getRequiredPathGroups() {
     if (!state.systemInitialized || !state.zones) return null
     Set<String> keys = getInstalledChildKeys()
-    Set<String> groups = ["system", "zones", "schedules", "systemControl", "systemController", "devices", "reminderSensors", "reminders", "fwm"] as Set
+    // Keep baseline local/cloud subscriptions lean so zone telemetry stays timely.
+    Set<String> groups = ["system", "zones"] as Set
     if (keys.any { it.startsWith("switch-manualAway") || it.startsWith("switch-smartAwayEnable") || it == "sensor-homeState" }) groups << "occupancy"
     if (keys.any { it == "sensor-activeAlerts" }) groups << "alerts"
-    boolean needEquipments = keys.any { it.startsWith("zone-") || it.startsWith("sensor-diag-") }
+    // Equipments payload is very large; only request when diagnostic sensor children exist.
+    boolean needEquipments = keys.any { it.startsWith("sensor-diag-") }
     if (needEquipments) groups << "equipments"
     if (keys.any { it == "sensor-iaqPm25" || it == "sensor-iaqVoc" || it == "sensor-iaqCo2" }) groups << "indoorAirQuality"
     if (keys.any { it.startsWith("sensor-ble-") }) groups << "ble"
     if (keys.any { it == "sensor-wifiRssi" }) groups << "interfaces"
     if (keys.any { it == "sensor-internetStatus" || it == "sensor-relayStatus" }) groups << "rgw"
+    // Legacy/optional groups only when specific children are installed.
+    if (keys.any { it.startsWith("sensor-reminder") }) groups << "reminderSensors" << "reminders"
+    if (keys.any { it == "sensor-fwm" }) groups << "fwm"
+    if (keys.any { it == "sensor-deviceInventory" }) groups << "devices"
+    if (keys.any { it == "sensor-schedules" }) groups << "schedules"
+    if (keys.any { it == "sensor-systemControl" }) groups << "systemControl"
+    if (keys.any { it == "sensor-systemController" }) groups << "systemController"
     return groups
 }
 
@@ -868,24 +871,23 @@ private static String toJsonPathString(List<String> segments) {
 }
 
 String buildLocalPaths1(Set<String> pathGroups) {
-    List<String> p = ["1", "systemControl", "systemController", "reminderSensors", "reminders"]
+    List<String> p = ["1"]
+    if (pathGroups.contains("systemControl")) p << "systemControl"
+    if (pathGroups.contains("systemController")) p << "systemController"
+    if (pathGroups.contains("reminderSensors")) p << "reminderSensors"
+    if (pathGroups.contains("reminders")) p << "reminders"
     if (pathGroups.contains("alerts")) p << "alerts/active" << "alerts/meta"
     if (pathGroups.contains("ble")) p << "bleProvisionDB" << "ble"
     if (pathGroups.contains("indoorAirQuality")) p << "indoorAirQuality"
-    p << "fwm"
+    if (pathGroups.contains("fwm")) p << "fwm"
+    if (pathGroups.contains("interfaces")) p << "interfaces"
     if (pathGroups.contains("rgw")) p << "rgw"
-    p << "devices" << "zones"
+    if (pathGroups.contains("devices")) p << "devices"
+    p << "zones"
     if (pathGroups.contains("equipments")) p << "equipments"
-    p << "schedules"
+    if (pathGroups.contains("schedules")) p << "schedules"
     if (pathGroups.contains("occupancy")) p << "occupancy"
     p << "system"
-    return toJsonPathString(p)
-}
-
-String buildLocalPaths2(Set<String> pathGroups) {
-    List<String> p = ["1"]
-    if (pathGroups.contains("interfaces")) p << "interfaces"
-    if (p.size() == 1) p << "reminders"
     return toJsonPathString(p)
 }
 
@@ -924,6 +926,7 @@ void messagePump() {
     
     String appId = state.appId ?: (state.isLocalConnection ? DEFAULT_LOCAL_APP_ID : DEFAULT_CLOUD_APP_ID)
     Integer timeout = settings.longPollTimeout ?: 15
+    Long startTimeSec = state.retrieveStartTimeSec ?: 1L
     
     if (state.isLocalConnection) {
         // Cap long poll so we don't hold the connection longer than the gap between polls;
@@ -945,7 +948,7 @@ void messagePump() {
             query: [
                 Direction: "Oldest-to-Newest",
                 MessageCount: "10",
-                StartTime: "1",
+                StartTime: startTimeSec.toString(),
                 LongPollingTimeout: timeout.toString()
             ],
             timeout: timeout + 15
@@ -966,7 +969,7 @@ void messagePump() {
             query: [
                 Direction: "Oldest-to-Newest",
                 MessageCount: "10",
-                StartTime: "1",
+                StartTime: startTimeSec.toString(),
                 LongPollingTimeout: "0"  // Cloud doesn't support long polling
             ],
             headers: [
@@ -2211,6 +2214,11 @@ void publishMessage(Map data, String additionalParameters = null) {
                 }
                 if (result?.code == 1) {
                     if (logEnable) log.debug "Publish successful"
+                    // Prioritize fresh post-command state and skip stale queued snapshots.
+                    Long nowSec = (long)(new Date().time / 1000)
+                    state.retrieveStartTimeSec = nowSec - 2
+                    state.activeMessageBatch = null
+                    state.queuedMessageBatch = null
                     triggerFastPoll()
                 } else {
                     log.error "Publish failed with code: ${result?.code}"
@@ -2491,6 +2499,7 @@ void setZoneFanMode(Integer zoneId, String mode) {
 
 void setZoneSetpoints(Integer zoneId, BigDecimal hsp, BigDecimal csp, BigDecimal sp = null) {
     Integer scheduleId = 16 + zoneId
+    Map zoneState = state.zones?.get(zoneId.toString()) ?: [:]
     Map period = [:]
     
     if (sp != null) {
@@ -2501,10 +2510,31 @@ void setZoneSetpoints(Integer zoneId, BigDecimal hsp, BigDecimal csp, BigDecimal
         if (hsp != null) {
             period.hsp = hsp.intValue()
             period.hspC = fahrenheitToCelsius(hsp)
+            period.isHspChanged = true
         }
         if (csp != null) {
             period.csp = csp.intValue()
             period.cspC = fahrenheitToCelsius(csp)
+            period.isCspChanged = true
+        }
+        
+        // Preserve the opposite setpoint when only one side changes.
+        // Lennox manual schedule updates can otherwise snap to an unexpected value.
+        if (hsp != null && csp == null && zoneState.csp != null) {
+            period.csp = zoneState.csp as Integer
+            if (zoneState.cspC != null) {
+                period.cspC = zoneState.cspC
+            } else {
+                period.cspC = fahrenheitToCelsius(new BigDecimal(zoneState.csp.toString()))
+            }
+        }
+        if (csp != null && hsp == null && zoneState.hsp != null) {
+            period.hsp = zoneState.hsp as Integer
+            if (zoneState.hspC != null) {
+                period.hspC = zoneState.hspC
+            } else {
+                period.hspC = fahrenheitToCelsius(new BigDecimal(zoneState.hsp.toString()))
+            }
         }
     }
     
