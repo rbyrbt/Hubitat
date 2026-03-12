@@ -1005,11 +1005,17 @@ void handleMessagePumpResponse(resp, data) {
                 def json = new JsonSlurper().parseText(body)
                 if (json?.messages && json.messages.size() > 0) {
                     List batch = json.messages
+                    // Keep only the newest message from this Retrieve response to avoid replay lag.
+                    if (batch.size() > 1) {
+                        batch = [batch[-1]]
+                    }
                     if (logEnable) log.debug "Retrieve: ${batch.size()} message(s), response size: ${body.size()} chars"
                     if (body.size() > 50000) {
                         log.warn "Large Retrieve response (${body.size()} chars, ${batch.size()} message(s)) - processing may be slow. Consider removing unused child devices so RequestData requests less data."
+                        // Large response usually indicates backlog; jump retrieval window forward.
+                        state.retrieveStartTimeSec = ((long)(new Date().time / 1000) - 2)
                     }
-                    // Defer processing so we return quickly and schedule the next poll immediately.
+                    // Latest-only policy: if a newer batch arrives while one is active, replace queued batch.
                     if (state.activeMessageBatch != null) {
                         state.queuedMessageBatch = batch
                     } else {
@@ -1079,6 +1085,10 @@ void processActiveMessageBatch() {
     }
     
     try {
+        // Safety: process only newest message from active batch.
+        if (batch.size() > 1) {
+            batch = [batch[-1]]
+        }
         if (logEnable) log.debug "Processing batch: ${batch.size()} message(s)"
         batch.each { message ->
             processMessage(message)
