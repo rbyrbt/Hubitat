@@ -1,13 +1,13 @@
 {
 	"packageName": "Lennox iComfort",
 	"author": "rbyrbt",
-	"version": "1.1.4",
+	"version": "1.1.5",
 	"minimumHEVersion": "2.1.9",
-	"dateReleased": "2026-03-11",
+	"dateReleased": "2026-03-14",
 	"documentationLink": "https://github.com/rbyrbt/Hubitat/blob/main/LennoxiComfort/README.md",
 	"communityLink": "https://community.hubitat.com/t/release-lennox-icomfort-s30/162305",
 	"payPalUrl": "https://ko-fi.com/rbyrbt",
-	"releaseNotes": "v1.1.4: Local LAN reliability fixes for RequestData and updates (lean discovery/dynamic paths, stale queue mitigation via Retrieve StartTime, and improved setpoint command compatibility). v1.1.3: Cloud Retrieve no longer requests full schedules; schedule preset dropdown remains work in progress. v1.1.2: App-state tokens, message pump watchdog, load optimizations.",
+	"releaseNotes": "v1.1.5: 408/400 session timeout reconnection (local and cloud); avoid huge message batch on new/reinstall (no StartTime=1, clear queue at connect/config, reject >100k char Retrieve); default logging: debug off, description text on. v1.1.4: Local LAN reliability fixes. v1.1.3: Cloud payload reduction. v1.1.2: App-state tokens, message pump watchdog.",
 	"tags": ["Climate Control", "Temperature & Humidity", "Cloud", "LAN"],
 	"apps": [
 		{

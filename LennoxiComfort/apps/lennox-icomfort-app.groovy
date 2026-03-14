@@ -17,6 +17,7 @@
  *  v1.1.2   03-10-26   Tokens and device data in app state (not on device list); message pump watchdog; load optimizations
  *  v1.1.3   03-11-26   Cloud payload reduction (no full schedules); zone schedule presets (WIP)
  *  v1.1.4   03-11-26   Local LAN reliability fixes (lean RequestData paths, queue handling, setpoint compatibility)
+ *  v1.1.5   03-14-26   Default logging: debug off, description text on (new systems)
  *
  */
 
@@ -525,7 +526,7 @@ def globalSettingsPage() {
 
         section("<b>Logging</b>") {
             paragraph "Applied immediately to all controller devices and their child devices."
-            input name: "defaultLogEnable", type: "bool", title: "Enable Debug Logging", defaultValue: true, submitOnChange: true
+            input name: "defaultLogEnable", type: "bool", title: "Enable Debug Logging", defaultValue: false, submitOnChange: true
             input name: "defaultTxtEnable", type: "bool", title: "Enable Description Text Logging", defaultValue: true, submitOnChange: true
         }
 

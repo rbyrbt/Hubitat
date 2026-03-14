@@ -12,6 +12,7 @@
  *  v1.1.2  Tokens/connectionToken and schedules/equipment/diagnostics in app state; message pump watchdog; load optimizations.
  *  v1.1.3  Cloud: stop requesting full schedules to reduce Retrieve payload. Zone schedule preset dropdown (No Schedule, Schedule IQ, Save Energy, Heat Only, Cool Only, Schedule)—work in progress.
  *  v1.1.4  Local LAN reliability fixes: lean discovery/dynamic RequestData paths, stale-queue mitigation for Retrieve StartTime, and setpoint command compatibility improvements.
+ *  v1.1.5  Treat 408/400 as session timeout for both local and cloud; reconnect after 2 consecutive failures. Avoid huge message batch: never use StartTime=1 (epoch); clear queue and set cursor at connect/configureFromApp; reject Retrieve responses >100k chars.
  */
 
 import groovy.json.JsonSlurper
@@ -43,6 +44,9 @@ import groovy.transform.Field
 // Watchdog: if no Retrieve response within this many seconds, restart poll cycle (Hubitat can drop runIn after long run)
 @Field static final Integer MESSAGE_PUMP_WATCHDOG_INTERVAL_SEC = 300
 @Field static final Integer MESSAGE_PUMP_STALL_THRESHOLD_MULTIPLIER = 3
+
+// Reject Retrieve responses larger than this to avoid huge activeMessageBatch (e.g. new system pulling full backlog)
+@Field static final Integer RETRIEVE_RESPONSE_MAX_CHARS = 100000
 
 // Cloud API URLs
 @Field static final String CLOUD_AUTHENTICATE_URL = "https://ic3messaging.myicomfort.com/v1/mobile/authenticate"
@@ -197,6 +201,11 @@ void configureFromApp(Map config) {
     if (config.logEnable != null) device.updateSetting("logEnable", [type: "bool", value: config.logEnable])
     if (config.txtEnable != null) device.updateSetting("txtEnable", [type: "bool", value: config.txtEnable])
 
+    // Clear message queue and set fresh retrieval cursor so we never start with a huge backlog (e.g. after add/reinstall)
+    state.activeMessageBatch = null
+    state.queuedMessageBatch = null
+    state.retrieveStartTimeSec = (long)(new Date().time / 1000) - 2
+
     runIn(2, "initialize")
 }
 
@@ -273,6 +282,10 @@ void connect() {
     sendEvent(name: "connectionState", value: STATE_CONNECTING)
     
     state.connected = false
+    state.activeMessageBatch = null
+    state.queuedMessageBatch = null
+    // Set retrieval cursor to "now" so first Retrieve never uses epoch (1L) and never pulls full backlog
+    state.retrieveStartTimeSec = (long)(new Date().time / 1000) - 2
     
     if (settings.connectionType == "local") {
         connectLocal()
@@ -926,7 +939,9 @@ void messagePump() {
     
     String appId = state.appId ?: (state.isLocalConnection ? DEFAULT_LOCAL_APP_ID : DEFAULT_CLOUD_APP_ID)
     Integer timeout = settings.longPollTimeout ?: 15
-    Long startTimeSec = state.retrieveStartTimeSec ?: 1L
+    // Never use 1L (epoch): new/reinstalled systems would pull years of backlog. Use "now" if unset.
+    if (state.retrieveStartTimeSec == null) state.retrieveStartTimeSec = (long)(new Date().time / 1000) - 2
+    Long startTimeSec = state.retrieveStartTimeSec
     
     if (state.isLocalConnection) {
         // Cap long poll so we don't hold the connection longer than the gap between polls;
@@ -946,8 +961,9 @@ void messagePump() {
             uri: url,
             ignoreSSLIssues: true,
             query: [
-                Direction: "Oldest-to-Newest",
-                MessageCount: "10",
+                // Favor freshest state updates on LAN; avoid draining stale backlogs first.
+                Direction: "Newest-to-Oldest",
+                MessageCount: "1",
                 StartTime: startTimeSec.toString(),
                 LongPollingTimeout: timeout.toString()
             ],
@@ -1002,28 +1018,35 @@ void handleMessagePumpResponse(resp, data) {
             state.consecutiveRetrieveFailures = 0
             String body = resp.getData()
             if (body) {
-                def json = new JsonSlurper().parseText(body)
-                if (json?.messages && json.messages.size() > 0) {
-                    List batch = json.messages
-                    // Keep only the newest message from this Retrieve response to avoid replay lag.
-                    if (batch.size() > 1) {
-                        batch = [batch[-1]]
-                    }
-                    if (logEnable) log.debug "Retrieve: ${batch.size()} message(s), response size: ${body.size()} chars"
-                    if (body.size() > 50000) {
-                        log.warn "Large Retrieve response (${body.size()} chars, ${batch.size()} message(s)) - processing may be slow. Consider removing unused child devices so RequestData requests less data."
-                        // Large response usually indicates backlog; jump retrieval window forward.
-                        state.retrieveStartTimeSec = ((long)(new Date().time / 1000) - 2)
-                    }
-                    // Latest-only policy: if a newer batch arrives while one is active, replace queued batch.
-                    if (state.activeMessageBatch != null) {
-                        state.queuedMessageBatch = batch
-                    } else {
-                        state.activeMessageBatch = batch
-                        runIn(0, "processActiveMessageBatch")
+                // Reject huge responses (e.g. new/reinstalled system pulling full backlog) so we never fill state or block child creation
+                if (body.size() > RETRIEVE_RESPONSE_MAX_CHARS) {
+                    log.warn "Retrieve response too large (${body.size()} chars) - skipping to avoid huge message batch. Next poll will use current time."
+                    state.retrieveStartTimeSec = ((long)(new Date().time / 1000) - 2)
+                } else {
+                    def json = new JsonSlurper().parseText(body)
+                    if (json?.messages && json.messages.size() > 0) {
+                        List batch = json.messages
+                        // Keep only the newest message from this Retrieve response to avoid replay lag.
+                        if (batch.size() > 1) {
+                            batch = [batch[-1]]
+                        }
+                        if (logEnable) log.debug "Retrieve: ${batch.size()} message(s), response size: ${body.size()} chars"
+                        if (body.size() > 50000) {
+                            log.warn "Large Retrieve response (${body.size()} chars, ${batch.size()} message(s)) - advancing cursor; consider removing unused child devices to reduce RequestData size."
+                            state.retrieveStartTimeSec = ((long)(new Date().time / 1000) - 2)
+                        }
+                        // Latest-only policy: if a newer batch arrives while one is active, replace queued batch.
+                        if (state.activeMessageBatch != null) {
+                            state.queuedMessageBatch = batch
+                        } else {
+                            state.activeMessageBatch = batch
+                            runIn(0, "processActiveMessageBatch")
+                        }
                     }
                 }
             }
+            // Advance retrieval cursor each successful response to avoid replaying overlapping windows.
+            state.retrieveStartTimeSec = ((long)(new Date().time / 1000) - 2)
         } else if (resp.status == 204) {
             state.consecutiveRetrieveFailures = 0
             // No messages - this is normal
@@ -1037,12 +1060,12 @@ void handleMessagePumpResponse(resp, data) {
             scheduleReconnect()
             return
         } else {
-            // Local: 400/408 after long run often means S30 session invalidated; reconnect to get fresh session
-            if (state.isLocalConnection && (resp.status == 400 || resp.status == 408)) {
+            // 400/408 after long run: local S30 or cloud session often stale (timeout/invalidated); reconnect to get fresh session
+            if (resp.status == 400 || resp.status == 408) {
                 state.consecutiveRetrieveFailures = (state.consecutiveRetrieveFailures ?: 0) + 1
-                Integer threshold = 5
+                Integer threshold = 2  // Reconnect after 2 consecutive timeouts to recover quickly without flapping on single blip
                 if (state.consecutiveRetrieveFailures >= threshold) {
-                    log.warn "Local Retrieve failed ${state.consecutiveRetrieveFailures} times (${resp.status}) - reconnecting to restore session"
+                    log.warn "Retrieve failed ${state.consecutiveRetrieveFailures} times (${resp.status}) - reconnecting to restore session"
                     state.connected = false
                     state.activeMessageBatch = null
                     state.queuedMessageBatch = null
@@ -1314,6 +1337,12 @@ void processSystemMessage(Map system) {
 
 void processZonesMessage(List zones) {
     if (logEnable) log.debug "Processing ${zones.size()} zones"
+    Long nowMs = new Date().time
+    if (logEnable && state.lastZoneMessageMs) {
+        Long deltaSec = ((nowMs - (state.lastZoneMessageMs as Long)) / 1000L) as Long
+        log.debug "Zone message interval: ${deltaSec}s"
+    }
+    state.lastZoneMessageMs = nowMs
     state.zonesDiscovered = true
     
     zones.each { zone ->
