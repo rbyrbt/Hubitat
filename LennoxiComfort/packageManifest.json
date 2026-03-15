@@ -6,7 +6,8 @@
 	"dateReleased": "2026-03-14",
 	"documentationLink": "https://github.com/rbyrbt/Hubitat/blob/main/LennoxiComfort/README.md",
 	"payPalUrl": "https://ko-fi.com/rbyrbt",
-	"releaseNotes": "v1.1.5: 408/400 session timeout reconnection (local and cloud); avoid huge message batch on new/reinstall (no StartTime=1, clear queue at connect/config, reject >100k char Retrieve); default logging: debug off, description text on. v1.1.4: Local LAN reliability fixes. v1.1.3: Cloud payload reduction. v1.1.2: App-state tokens, message pump watchdog.",
+	"communityLink": "https://community.hubitat.com/t/release-lennox-icomfort-s30/162305",
+	"releaseNotes": "v1.1.5: session timeout reconnection (local and cloud) to avoid huge message batch on new or reinstall.",
 	"tags": ["Climate Control", "Temperature & Humidity", "Cloud", "LAN"],
 	"apps": [
 		{
