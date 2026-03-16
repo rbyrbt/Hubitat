@@ -12,7 +12,7 @@
  *  v1.1.2  Tokens/connectionToken and schedules/equipment/diagnostics in app state; message pump watchdog; load optimizations.
  *  v1.1.3  Cloud: stop requesting full schedules to reduce Retrieve payload. Zone schedule preset dropdown (No Schedule, Schedule IQ, Save Energy, Heat Only, Cool Only, Schedule)—work in progress.
  *  v1.1.4  Local LAN reliability fixes: lean discovery/dynamic RequestData paths, stale-queue mitigation for Retrieve StartTime, and setpoint command compatibility improvements.
- *  v1.1.5  Treat 408/400 as session timeout for both local and cloud; reconnect after 2 consecutive failures. Avoid huge message batch: never use StartTime=1 (epoch); clear queue and set cursor at connect/configureFromApp; reject Retrieve responses >100k chars.
+ *  v1.1.5  Treat 408/400 as session timeout for both local and cloud; reconnect after 2 consecutive failures; clear message batch on every 408/400. Avoid huge message batch: never use StartTime=1 (epoch); clear queue and set cursor at connect/configureFromApp; reject Retrieve responses >100k chars.
  */
 
 import groovy.json.JsonSlurper
@@ -1062,13 +1062,13 @@ void handleMessagePumpResponse(resp, data) {
         } else {
             // 400/408 after long run: local S30 or cloud session often stale (timeout/invalidated); reconnect to get fresh session
             if (resp.status == 400 || resp.status == 408) {
+                state.activeMessageBatch = null
+                state.queuedMessageBatch = null
                 state.consecutiveRetrieveFailures = (state.consecutiveRetrieveFailures ?: 0) + 1
                 Integer threshold = 2  // Reconnect after 2 consecutive timeouts to recover quickly without flapping on single blip
                 if (state.consecutiveRetrieveFailures >= threshold) {
                     log.warn "Retrieve failed ${state.consecutiveRetrieveFailures} times (${resp.status}) - reconnecting to restore session"
                     state.connected = false
-                    state.activeMessageBatch = null
-                    state.queuedMessageBatch = null
                     sendEvent(name: "connectionState", value: STATE_RETRY_WAIT)
                     runIn(5, "connect")
                     return
