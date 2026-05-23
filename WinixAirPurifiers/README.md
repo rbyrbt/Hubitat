@@ -46,7 +46,7 @@ If you prefer not to use HPM, install via Hubitat’s **Import** (drivers first,
 ### Add the App
 
 1. Go to **Apps** → **Add User App**
-2. Select **Winix Connect**
+2. Select **Winix Air Purifier Connect**
 3. Choose an authentication method (see below)
 4. Click **Discover & Manage Devices**, then click **Discover Devices** to find your purifiers
 5. Toggle devices on to add them (devices show "✓ Added" when added)
@@ -57,7 +57,7 @@ If you prefer not to use HPM, install via Hubitat’s **Import** (drivers first,
 ### Method 1: In-App Login (Recommended)
 
 1. Enter your Winix account email and password in the app
-2. Click **Login** to authenticate
+2. Click **Log In** to authenticate
 3. Tokens are automatically managed and refreshed
 
 ### Method 2: Manual Token Entry (Fallback)
@@ -125,7 +125,8 @@ Clean dropdown with these options:
 ### API Endpoints
 
 - **Status**: `GET https://us.api.winix-iot.com/common/event/sttus/devices/{deviceId}`
-- **Control**: `GET https://us.api.winix-iot.com/common/control/devices/{deviceId}/A211/{attribute}:{value}`
+- **Control**: `GET https://us.api.winix-iot.com/common/control/devices/{deviceId}/{identityId}/{attribute}:{value}` (identityId from Cognito Identity Pool after login)
+- **Mobile (discovery)**: Encrypted POST to `https://us.mobile.winix-iot.com/*` (see [winix-api](https://github.com/regaw-leinad/winix-api))
 
 ## Child Devices
 
@@ -143,14 +144,22 @@ These appear as separate devices and can be used in dashboards, automations, or 
 ### Login Issues
 
 - Ensure your Winix account credentials are correct
-- Try the manual token entry method as a fallback
-- Check Hubitat logs for specific error messages
+- Winix rotated cloud authentication in 2026; this integration follows [homebridge-winix-purifiers](https://github.com/regaw-leinad/homebridge-winix-purifiers) v2.2+ / [winix-api](https://github.com/regaw-leinad/winix-api) v2.0+. Re-authenticate after updating if you logged in with an older version
+- Use a **dedicated alternate Winix account** for Hubitat if the Winix mobile app keeps logging you out (single-session limit)
+- Try **Manual Token Entry** using tokens from Homebridge or winix-api as a fallback
+- Check Hubitat logs (enable debug logging) for Cognito or `resultCode` errors
 
 ### Device Not Responding
 
 - Click **Refresh** on the device page
 - Check that the device is online in the Winix mobile app
-- Verify your access token hasn't expired (re-login if needed)
+- Re-authenticate in the app if commands fail (session or identity may have expired)
+- Use **Discover Devices** again after re-login if purifiers were added in the Winix app
+
+### Refresh / Schedule Issues
+
+- **Device Refresh Interval** defaults to 60 minutes (hourly). Values of 60 or more use hour-based scheduling; do not use invalid cron values.
+- If login succeeded but scheduling logged an error, open the app **Done** page once to re-save settings, or set refresh interval to 60 minutes
 
 ### Fan Speed Dropdown Shows Extra Options
 

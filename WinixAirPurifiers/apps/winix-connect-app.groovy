@@ -11,13 +11,17 @@
  *
  *  REVISION HISTORY
  *
+ *  v1.1.1 05-23-26   Auth fix (winix-api 2.0 / Homebridge 2.2.6); UI/scheduling polish; identity pool session
  *  v1.0   03-07-26   Initial release
  *
  */
 
 import groovy.transform.Field
 import java.security.MessageDigest
+import java.util.Random
+import javax.crypto.Cipher
 import javax.crypto.Mac
+import javax.crypto.spec.IvParameterSpec
 import javax.crypto.spec.SecretKeySpec
 
 definition(
@@ -41,12 +45,20 @@ preferences {
 }
 
 // ==================== Cognito Constants ====================
-// From parent project https://github.com/regaw-leinad/winix-api
-// Pulled from Winix Home v1.0.8 (Android) APK - https://github.com/hfern/winix
+// From winix-api 2.0.2 / homebridge-winix-purifiers 2.2.6 (Winix Smart v1.5.7 APK).
+// Winix rotated the Cognito app client on 2026-04-16 to a public client (no secret).
 @Field static final String COGNITO_REGION = "us-east-1"
 @Field static final String COGNITO_USER_POOL_ID = "us-east-1_Ofd50EosD"
-@Field static final String COGNITO_CLIENT_ID = "14og512b9u20b8vrdm55d8empi"
-@Field static final String COGNITO_CLIENT_SECRET = "k554d4pvgf2n0chbhgtmbe4q0ul4a9flp3pcl6a47ch6rripvvr"
+@Field static final String COGNITO_CLIENT_ID = "5rjk59c5tt7k9g8gpj0vd2qfg9"
+@Field static final String COGNITO_IDENTITY_POOL_ID = "us-east-1:84008e15-d6af-4698-8646-66d05c1abe8b"
+@Field static final String COGNITO_LOGINS_PROVIDER = "cognito-idp.us-east-1.amazonaws.com/us-east-1_Ofd50EosD"
+@Field static final String COGNITO_IDENTITY_URL = "https://cognito-identity.us-east-1.amazonaws.com/"
+
+// Winix mobile API (encrypted payloads as of Winix Smart v1.5.7)
+@Field static final String MOBILE_APP_VERSION = "1.5.7"
+@Field static final String MOBILE_MODEL = "SM-G988B"
+@Field static final String MOBILE_AES_KEY_HEX = "84be38f854e320dd4a0a8c7fe0f3a9b84c288445916933fc222465bbd5a518d0"
+@Field static final String MOBILE_AES_IV_HEX = "dfd55f316e72e97b905f8739005c99a7"
 
 // SRP Constants - N is the large safe prime for SRP
 @Field static final String N_HEX = "FFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD1" +
@@ -70,7 +82,8 @@ preferences {
 
 // Winix API endpoints
 @Field static final String WINIX_API_BASE = "https://us.api.winix-iot.com"
-@Field static final String COGNITO_IDP_URL = "https://cognito-idp.us-east-1.amazonaws.com"
+@Field static final String MOBILE_API_BASE = "https://us.mobile.winix-iot.com"
+@Field static final String COGNITO_IDP_URL = "https://cognito-idp.us-east-1.amazonaws.com/"
 
 // ==================== App Pages ====================
 
@@ -79,7 +92,8 @@ def mainPage() {
         // Section 1: Authentication
         section("Authentication") {
             if (state.accessToken) {
-                paragraph "✓ Connected to Winix"
+                def accountLabel = state.username ? " (${maskEmail(state.username)})" : ""
+                paragraph "✓ Connected to Winix${accountLabel}"
                 href "loginPage", title: "Re-authenticate", description: "Log in with username/password"
                 href "tokenEntryPage", title: "Manual Token Entry", description: "Enter tokens manually"
             } else {
@@ -87,6 +101,7 @@ def mainPage() {
                 href "loginPage", title: "Log In", description: "Connect your Winix account"
                 href "tokenEntryPage", title: "Manual Token Entry", description: "Enter tokens manually if login fails"
             }
+            paragraph "<small>For best stability, use a Winix account dedicated to Hubitat (not shared with the mobile app).</small>"
         }
         
         // Section 2: Device Discovery & Management
@@ -116,10 +131,8 @@ def mainPage() {
         // Section 3: Options (last)
         if (state.accessToken) {
             section("Polling Intervals") {
-                input name: "cacheIntervalSeconds", type: "number", title: "API Cache Interval (seconds)", 
-                      defaultValue: 60, range: "10..300"
-                input name: "deviceRefreshIntervalMinutes", type: "number", title: "Device Refresh Interval (minutes)", 
-                      defaultValue: 60, range: "1..1440"
+                input name: "deviceRefreshIntervalMinutes", type: "number", title: "Device Refresh Interval (minutes)",
+                      defaultValue: 60, range: "1..1440", description: "How often all purifiers poll status (60 = hourly)"
             }
             section("Filter Alert") {
                 input name: "filterReplacementThreshold", type: "number", title: "Filter Replacement Alert (%)", 
@@ -151,6 +164,7 @@ def loginPage() {
         if (state.loginSuccess) {
             section {
                 paragraph "<span style='color:green'>Successfully logged in!</span>"
+                href "mainPage", title: "Back to main page", description: "Discover and add purifiers"
             }
             state.loginSuccess = null
         }
@@ -163,8 +177,8 @@ def loginPage() {
 def tokenEntryPage() {
     dynamicPage(name: "tokenEntryPage", title: "Manual Token Entry") {
         section {
-            paragraph "If automatic login isn't working, you can manually enter tokens from the get-tokens tool."
-            paragraph "<b>Instructions:</b><br>1. Run: <code>node get-tokens.mjs</code><br>2. Enter your Winix credentials<br>3. Copy the tokens below"
+            paragraph "If automatic login isn't working, obtain tokens from the upstream Homebridge plugin or winix-api (same Cognito account)."
+            paragraph "<b>Instructions:</b><br>1. Use <a href='https://github.com/regaw-leinad/homebridge-winix-purifiers'>homebridge-winix-purifiers</a> or <a href='https://github.com/regaw-leinad/winix-api'>winix-api</a> to log in<br>2. Copy the access and refresh tokens<br>3. Paste them below"
         }
         section("Tokens") {
             input name: "manualAccessToken", type: "textarea", title: "Access Token", required: false, submitOnChange: true
@@ -189,6 +203,7 @@ def tokenEntryPage() {
         if (state.tokenSuccess) {
             section {
                 paragraph "<span style='color:green'>Tokens saved successfully!</span>"
+                href "mainPage", title: "Back to main page", description: "Discover and add purifiers"
             }
             state.tokenSuccess = null
         }
@@ -203,7 +218,12 @@ def devicesPage() {
         section {
             input name: "doDiscover", type: "button", title: "Discover Devices"
         }
-        
+        if (state.discoverMessage) {
+            section {
+                paragraph state.discoverMessage
+            }
+            state.discoverMessage = null
+        }
         if (state.discoveredDevices) {
             section("Devices") {
                 paragraph "Toggle devices to add or remove them"
@@ -214,6 +234,10 @@ def devicesPage() {
                           title: "${device.deviceAlias}${addedIndicator}", description: device.modelName,
                           defaultValue: installed != null, submitOnChange: true
                 }
+            }
+        } else if (!state.discoverMessage) {
+            section {
+                paragraph "Click <b>Discover Devices</b> to find purifiers on your account."
             }
         }
     }
@@ -320,12 +344,54 @@ def initialize() {
     unschedule()
     
     if (state.accessToken && state.refreshToken) {
-        // Schedule token refresh (tokens expire in ~1 hour, refresh at 50 minutes)
+        // Recover session after upgrade or hub reboot (identityId required for device control)
+        if (!state.idToken || (state.tokenExpiry && now() > state.tokenExpiry - 60000)) {
+            refreshAuthToken()
+        } else if (!state.identityId) {
+            establishWinixSession()
+        }
+
         runEvery1Hour(refreshAuthToken)
-        
-        // Schedule device refresh based on settings
-        def refreshMinutes = deviceRefreshIntervalMinutes ?: 60
+        try {
+            scheduleDeviceRefresh()
+        } catch (Exception e) {
+            log.error "Device refresh schedule failed: ${e.message}; using hourly fallback"
+            runEvery1Hour(refreshAllDevices)
+        }
+    }
+}
+
+def scheduleDeviceRefresh() {
+    int refreshMinutes = (deviceRefreshIntervalMinutes ?: 60) as int
+    refreshMinutes = Math.max(1, Math.min(refreshMinutes, 1440))
+
+    // Cron minutes are 0-59; */60 is invalid. Use hour-based cron when interval >= 60 min.
+    if (refreshMinutes >= 1440) {
+        schedule("0 0 0 * ? *", refreshAllDevices)
+    } else if (refreshMinutes >= 60) {
+        int hours = (int) (refreshMinutes / 60)
+        if (hours < 1) hours = 1
+        if (hours == 1) {
+            runEvery1Hour(refreshAllDevices)
+        } else if (hours <= 23) {
+            schedule("0 0 */${hours} * ? *", refreshAllDevices)
+        } else {
+            runEvery1Hour(refreshAllDevices)
+        }
+    } else if (refreshMinutes == 30) {
+        runEvery30Minutes(refreshAllDevices)
+    } else if (refreshMinutes == 15) {
+        schedule("0 */15 * ? * *", refreshAllDevices)
+    } else if (refreshMinutes == 10) {
+        runEvery10Minutes(refreshAllDevices)
+    } else if (refreshMinutes == 5) {
+        runEvery5Minutes(refreshAllDevices)
+    } else if (refreshMinutes == 1) {
+        runEvery1Minute(refreshAllDevices)
+    } else if (refreshMinutes > 0 && refreshMinutes < 60) {
         schedule("0 */${refreshMinutes} * ? * *", refreshAllDevices)
+    } else {
+        runEvery1Hour(refreshAllDevices)
     }
 }
 
@@ -337,7 +403,7 @@ def uninstalled() {
 // ==================== Authentication ====================
 
 def performLogin() {
-    String username = settings.winixUsername
+    String username = settings.winixUsername?.trim()
     String password = settings.winixPassword
     
     logDebug "Performing login for ${username}"
@@ -351,22 +417,33 @@ def performLogin() {
     }
     
     try {
-        def authResult = authenticateWithSRP(username, password)
+        def authResult = authenticateWithSRP(username, password, 3)
         
         if (authResult.success) {
             state.username = username
             state.accessToken = authResult.accessToken
+            state.idToken = authResult.idToken
             state.refreshToken = authResult.refreshToken
             state.userId = authResult.userId
             state.tokenExpiry = now() + (authResult.expiresIn * 1000)
+            if (!establishWinixSession()) {
+                state.loginError = "Login succeeded but Winix session setup failed. Try again or use manual token entry."
+                log.error state.loginError
+                return
+            }
             state.loginSuccess = true
-            logDebug "Login successful"
+            try {
+                initialize()
+            } catch (Exception scheduleEx) {
+                log.error "Login OK but scheduling failed: ${scheduleEx.message}"
+            }
+            log.info "Winix login successful for ${maskEmail(username)}"
         } else {
-            state.loginError = authResult.error ?: "Login failed"
+            state.loginError = userFriendlyError(authResult.error ?: "Login failed")
             log.error "Login failed: ${state.loginError}"
         }
     } catch (Exception e) {
-        state.loginError = "Login error: ${e.message}"
+        state.loginError = userFriendlyError(e.message)
         log.error "Login exception: ${e.message}"
     }
 }
@@ -375,7 +452,7 @@ def testManualToken() {
     logDebug "Testing manual token"
     state.tokenTestResult = null
     
-    String accessToken = settings.manualAccessToken
+    String accessToken = trimToken(settings.manualAccessToken)
     
     if (!accessToken) {
         state.tokenTestResult = "<span style='color:red'>Please enter an Access Token to test</span>"
@@ -390,33 +467,17 @@ def testManualToken() {
             return
         }
         
-        // Step 2: Try to make an API call to verify the token
-        String deviceUuid = generateWinixUuid(userId)
-        
-        def testParams = [
-            uri: "https://us.mobile.winix-iot.com/checkAccessToken",
-            contentType: "application/json",
-            body: [
-                cognitoClientSecretKey: COGNITO_CLIENT_SECRET,
-                accessToken: accessToken,
-                uuid: deviceUuid,
-                osVersion: "29",
-                mobileLang: "en"
-            ],
-            timeout: 15
-        ]
-        
-        def testResult = false
-        httpPost(testParams) { resp ->
-            if (resp.status == 200) {
-                testResult = true
+        // Step 2: If refresh token provided, verify it can obtain fresh tokens
+        String refreshToken = trimToken(settings.manualRefreshToken)
+        if (refreshToken) {
+            def refreshResult = refreshCognitoToken(refreshToken, userId)
+            if (refreshResult.success) {
+                state.tokenTestResult = "<span style='color:green'>✓ Tokens valid! User ID: ${userId.take(8)}...</span>"
+            } else {
+                state.tokenTestResult = "<span style='color:orange'>⚠ Access token decodes but refresh failed: ${refreshResult.error}</span>"
             }
-        }
-        
-        if (testResult) {
-            state.tokenTestResult = "<span style='color:green'>✓ Token is valid! User ID: ${userId.take(8)}...</span>"
         } else {
-            state.tokenTestResult = "<span style='color:orange'>⚠ Token decoded but API verification failed - token may be expired</span>"
+            state.tokenTestResult = "<span style='color:green'>✓ Access token format valid (User ID: ${userId.take(8)}...). Add refresh token to fully verify.</span>"
         }
     } catch (Exception e) {
         state.tokenTestResult = "<span style='color:red'>✗ Token test failed: ${e.message}</span>"
@@ -428,8 +489,8 @@ def saveManualTokens() {
     state.tokenError = null
     state.tokenSuccess = null
     
-    String accessToken = settings.manualAccessToken
-    String refreshToken = settings.manualRefreshToken
+    String accessToken = trimToken(settings.manualAccessToken)
+    String refreshToken = trimToken(settings.manualRefreshToken)
     
     if (!accessToken || !refreshToken) {
         state.tokenError = "Both tokens are required"
@@ -444,17 +505,29 @@ def saveManualTokens() {
             return
         }
         
-        // Store tokens
-        state.accessToken = accessToken
+        def refreshResult = refreshCognitoToken(refreshToken, userId)
+        if (!refreshResult.success) {
+            state.tokenError = "Refresh token invalid: ${refreshResult.error}"
+            return
+        }
+
+        state.accessToken = refreshResult.accessToken
+        state.idToken = refreshResult.idToken
         state.refreshToken = refreshToken
         state.userId = userId
         state.username = "Manual Entry"
-        state.tokenExpiry = now() + (3600 * 1000)  // Assume 1 hour expiry
+        state.tokenExpiry = now() + (refreshResult.expiresIn * 1000)
+
+        if (!establishWinixSession()) {
+            state.tokenError = "Tokens saved but Winix session setup failed"
+            return
+        }
+
         state.tokenSuccess = true
-        
+        initialize()
         logDebug "Manual tokens saved successfully"
     } catch (Exception e) {
-        state.tokenError = "Error saving tokens: ${e.message}"
+        state.tokenError = userFriendlyError(e.message)
         log.error "Token save error: ${e.message}"
     }
 }
@@ -472,7 +545,13 @@ def refreshAuthToken() {
         
         if (result.success) {
             state.accessToken = result.accessToken
+            state.idToken = result.idToken
             state.tokenExpiry = now() + (result.expiresIn * 1000)
+            state.winixUuid = generateWinixUuid(state.userId)
+            if (!establishWinixSession()) {
+                log.error "Token refreshed but Winix session setup failed"
+                return false
+            }
             logDebug "Token refreshed successfully"
             return true
         } else {
@@ -487,144 +566,117 @@ def refreshAuthToken() {
 
 // ==================== SRP Authentication Implementation ====================
 
-def authenticateWithSRP(String username, String password) {
-    logDebug "Starting SRP authentication"
-    
-    // Initialize SRP values
+def authenticateWithSRP(String username, String password, int maxAttempts = 3) {
+    String lastError = "Login failed"
+    for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+        logDebug "Starting SRP authentication (attempt ${attempt}/${maxAttempts})"
+        def result = authenticateWithSRPOnce(username, password)
+        if (result.success) {
+            return result
+        }
+        lastError = result.error ?: lastError
+        if (attempt < maxAttempts) {
+            pauseExecution(3000)
+        }
+    }
+    return [success: false, error: lastError]
+}
+
+def authenticateWithSRPOnce(String username, String password) {
     BigInteger bigN = new BigInteger(N_HEX, 16)
     BigInteger g = new BigInteger(G_HEX, 16)
     BigInteger k = hexToLong(hexHash("00" + N_HEX + "0" + G_HEX))
-    
-    // Generate random small 'a' value (128 bytes = 1024 bits)
+
     BigInteger smallA = generateRandomSmallA(bigN)
-    
-    // Calculate large 'A' value: A = g^a mod N
     BigInteger largeA = g.modPow(smallA, bigN)
-    
+
     if (largeA.mod(bigN) == BigInteger.ZERO) {
         return [success: false, error: "Safety check for A failed"]
     }
-    
-    // Calculate secret hash
-    String secretHash = calculateSecretHash(username, COGNITO_CLIENT_ID, COGNITO_CLIENT_SECRET)
-    
-    // Get hex string of A (uppercase to match some AWS implementations)
+
     String srpAHex = largeA.toString(16)
-    
-    logDebug "Initiating SRP auth flow"
-    
-    // Step 1: Initiate auth with USER_SRP_AUTH
+
     def initiateParams = [
         AuthFlow: "USER_SRP_AUTH",
         ClientId: COGNITO_CLIENT_ID,
         AuthParameters: [
             USERNAME: username,
-            SRP_A: srpAHex,
-            SECRET_HASH: secretHash
+            SRP_A: srpAHex
         ]
     ]
-    
-    // Log the JSON to verify structure
-    
+
     def initiateResponse = cognitoRequest("InitiateAuth", initiateParams)
-    
     if (!initiateResponse.success) {
         return [success: false, error: initiateResponse.error]
     }
-    
-    def challengeParams = initiateResponse.data.ChallengeParameters
-    
+
     if (initiateResponse.data.ChallengeName != "PASSWORD_VERIFIER") {
         return [success: false, error: "Unexpected challenge: ${initiateResponse.data.ChallengeName}"]
     }
-    
-    // Step 2: Process the challenge
+
+    def challengeParams = initiateResponse.data.ChallengeParameters
     String userIdForSrp = challengeParams.USER_ID_FOR_SRP
     String saltHex = challengeParams.SALT
     String srpBHex = challengeParams.SRP_B
     String secretBlockB64 = challengeParams.SECRET_BLOCK
-    
+
     BigInteger serverB = new BigInteger(srpBHex, 16)
     BigInteger salt = new BigInteger(saltHex, 16)
-    
-    // Calculate u = H(A || B)
     BigInteger u = calculateU(largeA, serverB)
-    
+
     if (u == BigInteger.ZERO) {
         return [success: false, error: "U value cannot be zero"]
     }
-    
-    // Get the pool ID without region prefix
+
     String poolName = COGNITO_USER_POOL_ID.split("_")[1]
-    
-    // Calculate x = H(salt || H(poolName || username || ":" || password))
     String usernamePassword = "${poolName}${userIdForSrp}:${password}"
     String usernamePasswordHash = hashSha256(usernamePassword.getBytes("UTF-8"))
     BigInteger x = hexToLong(hexHash(padHex(salt) + usernamePasswordHash))
-    
-    // Calculate S = (B - k * g^x)^(a + u * x) mod N
+
     BigInteger gModPowXN = g.modPow(x, bigN)
-    BigInteger kgx = k.multiply(gModPowXN)
-    BigInteger diff = serverB.subtract(kgx)
-    // Handle negative difference
+    BigInteger diff = serverB.subtract(k.multiply(gModPowXN))
     if (diff.signum() < 0) {
         diff = diff.add(bigN)
     }
-    BigInteger exponent = smallA.add(u.multiply(x))
-    BigInteger s = diff.modPow(exponent, bigN)
-    
-    // Compute HKDF
-    byte[] hkdf = computeHkdf(
-        hexToBytes(padHex(s)),
-        hexToBytes(padHex(u))
-    )
-    
-    // Generate timestamp
+    BigInteger s = diff.modPow(smallA.add(u.multiply(x)), bigN)
+
+    byte[] hkdf = computeHkdf(hexToBytes(padHex(s)), hexToBytes(padHex(u)))
     String timestamp = formatTimestamp(new Date())
-    
-    // Calculate signature
+
     byte[] secretBlock = secretBlockB64.decodeBase64()
     byte[] message = (poolName + userIdForSrp).getBytes("UTF-8")
     message = concatBytes(message, secretBlock)
     message = concatBytes(message, timestamp.getBytes("UTF-8"))
-    
     String signature = hmacSha256Base64(hkdf, message)
-    
-    // Calculate SECRET_HASH for the challenge response using userIdForSrp
-    String challengeSecretHash = calculateSecretHash(userIdForSrp, COGNITO_CLIENT_ID, COGNITO_CLIENT_SECRET)
-    
-    // Step 3: Respond to auth challenge
+
+    // winix-api warrant-lite: challenge USERNAME must be the login email, not USER_ID_FOR_SRP
     def challengeResponse = [
         ChallengeName: "PASSWORD_VERIFIER",
         ClientId: COGNITO_CLIENT_ID,
         ChallengeResponses: [
-            USERNAME: userIdForSrp,
+            USERNAME: username,
             TIMESTAMP: timestamp,
             PASSWORD_CLAIM_SECRET_BLOCK: secretBlockB64,
-            PASSWORD_CLAIM_SIGNATURE: signature,
-            SECRET_HASH: challengeSecretHash
+            PASSWORD_CLAIM_SIGNATURE: signature
         ]
     ]
-    
-    logDebug "Calling RespondToAuthChallenge"
+
     def authResponse = cognitoRequest("RespondToAuthChallenge", challengeResponse)
-    
     if (!authResponse.success) {
         return [success: false, error: authResponse.error]
     }
-    
+
     if (authResponse.data.ChallengeName == "NEW_PASSWORD_REQUIRED") {
         return [success: false, error: "Password change required - please change your password in the Winix app first"]
     }
-    
+
     def authResult = authResponse.data.AuthenticationResult
-    
-    // Decode JWT to get user ID
     String userId = decodeJwtSub(authResult.AccessToken)
-    
+
     return [
         success: true,
         accessToken: authResult.AccessToken,
+        idToken: authResult.IdToken,
         refreshToken: authResult.RefreshToken,
         expiresIn: authResult.ExpiresIn,
         userId: userId
@@ -632,28 +684,29 @@ def authenticateWithSRP(String username, String password) {
 }
 
 def refreshCognitoToken(String refreshToken, String userId) {
-    String secretHash = calculateSecretHash(userId, COGNITO_CLIENT_ID, COGNITO_CLIENT_SECRET)
-    
     def params = [
         AuthFlow: "REFRESH_TOKEN",
         ClientId: COGNITO_CLIENT_ID,
         AuthParameters: [
-            REFRESH_TOKEN: refreshToken,
-            SECRET_HASH: secretHash
+            REFRESH_TOKEN: refreshToken
         ]
     ]
-    
+
     def response = cognitoRequest("InitiateAuth", params)
-    
     if (!response.success) {
+        def err = response.error ?: ""
+        if (err.contains("NotAuthorizedException")) {
+            return [success: false, error: "Refresh token has expired - please log in again"]
+        }
         return [success: false, error: response.error]
     }
-    
+
     def authResult = response.data.AuthenticationResult
-    
+
     return [
         success: true,
         accessToken: authResult.AccessToken,
+        idToken: authResult.IdToken,
         expiresIn: authResult.ExpiresIn
     ]
 }
@@ -667,7 +720,7 @@ def cognitoRequest(String action, Map params) {
     logDebug "Cognito ${action} request"
     
     def requestParams = [
-        uri: "https://cognito-idp.us-east-1.amazonaws.com/",
+        uri: COGNITO_IDP_URL,
         requestContentType: "application/json",
         contentType: "application/json",
         headers: [
@@ -692,25 +745,7 @@ def cognitoRequest(String action, Map params) {
         
         return result
     } catch (groovyx.net.http.HttpResponseException e) {
-        String errorMessage = "HTTP error: " + e.getStatusCode()
-        
-        try {
-            def resp = e.response
-            logDebug "HTTP error status: ${e.getStatusCode()}"
-            if (resp?.data != null) {
-                String errorText = resp.data.toString()
-                logDebug "Error response: ${errorText}"
-                if (errorText?.contains("__type")) {
-                    def errorJson = new groovy.json.JsonSlurper().parseText(errorText)
-                    errorMessage = (errorJson?.__type ?: "Error") + ": " + (errorJson?.message ?: errorText)
-                } else {
-                    errorMessage = errorText
-                }
-            }
-        } catch (Exception parseEx) {
-            logDebug "Could not parse error: ${parseEx.message}"
-        }
-        
+        String errorMessage = parseCognitoError(e)
         log.error "Cognito request failed: ${errorMessage}"
         return [success: false, error: errorMessage]
     } catch (Exception e) {
@@ -723,12 +758,11 @@ def cognitoRequest(String action, Map params) {
 // ==================== SRP Helper Functions ====================
 
 BigInteger generateRandomSmallA(BigInteger bigN) {
-    // Generate 256 bytes of random data (matching Node.js implementation)
+    // winix-api warrant-lite: 128 random bytes (Hubitat does not allow SecureRandom import)
     Random random = new Random()
-    byte[] bytes = new byte[256]
+    byte[] bytes = new byte[128]
     random.nextBytes(bytes)
-    BigInteger randomValue = new BigInteger(1, bytes)
-    return randomValue.mod(bigN)
+    return new BigInteger(1, bytes).mod(bigN)
 }
 
 BigInteger hexToLong(String hexString) {
@@ -747,9 +781,9 @@ String padHex(String hexStr) {
     if (hexStr.length() % 2 == 1) {
         hexStr = "0" + hexStr
     }
-    // If first character is high (8-F), prepend 00
-    String firstChar = hexStr.substring(0, 1).toUpperCase()
-    if ("89ABCDEF".contains(firstChar)) {
+    // If first nibble is high (8-F), prepend 00 (match winix-api warrant-lite)
+    String firstChar = hexStr.substring(0, 1)
+    if ("89ABCDEFabcdef".contains(firstChar)) {
         hexStr = "00" + hexStr
     }
     return hexStr
@@ -789,11 +823,6 @@ byte[] computeHkdf(byte[] ikm, byte[] salt) {
         result[i] = okm[i]
     }
     return result
-}
-
-String calculateSecretHash(String username, String clientId, String clientSecret) {
-    String message = username + clientId
-    return hmacSha256Base64(clientSecret.getBytes("UTF-8"), message.getBytes("UTF-8"))
 }
 
 String hmacSha256Base64(byte[] key, byte[] message) {
@@ -871,31 +900,186 @@ byte[] concatBytes(byte[] a, byte[] b) {
     return result
 }
 
+// ==================== Winix Mobile Session (winix-api 2.0) ====================
+
+def establishWinixSession() {
+    if (!state.accessToken || !state.idToken || !state.userId) {
+        log.error "establishWinixSession: missing tokens"
+        return false
+    }
+    state.winixUuid = generateWinixUuid(state.userId)
+    if (!resolveIdentityId(state.idToken)) {
+        return false
+    }
+    if (!registerWinixUser()) {
+        return false
+    }
+    if (!initWinixSession()) {
+        return false
+    }
+    if (!checkWinixAccessToken()) {
+        return false
+    }
+    return true
+}
+
+def resolveIdentityId(String idToken) {
+    logDebug "Resolving Cognito identity id"
+    def body = [
+        IdentityPoolId: COGNITO_IDENTITY_POOL_ID,
+        Logins: [(COGNITO_LOGINS_PROVIDER): idToken]
+    ]
+    def response = cognitoIdentityRequest("GetId", body)
+    if (!response.success) {
+        log.error "GetId failed: ${response.error}"
+        return false
+    }
+    state.identityId = response.data.IdentityId
+    logDebug "Resolved identityId"
+    return state.identityId != null
+}
+
+def cognitoIdentityRequest(String action, Map params) {
+    String targetHeader = "AWSCognitoIdentityService." + action
+    def requestParams = [
+        uri: COGNITO_IDENTITY_URL,
+        requestContentType: "application/json",
+        contentType: "application/json",
+        headers: [
+            "Content-Type": "application/x-amz-json-1.1",
+            "X-Amz-Target": targetHeader
+        ],
+        body: groovy.json.JsonOutput.toJson(params),
+        timeout: 30
+    ]
+    try {
+        def result = [success: false, error: "No response"]
+        httpPost(requestParams) { resp ->
+            if (resp.status == 200) {
+                result = [success: true, data: resp.data]
+            } else {
+                result = [success: false, error: "HTTP ${resp.status}"]
+            }
+        }
+        return result
+    } catch (groovyx.net.http.HttpResponseException e) {
+        return [success: false, error: parseCognitoError(e)]
+    } catch (Exception e) {
+        return [success: false, error: e.message ?: "Unknown error"]
+    }
+}
+
+def mobilePost(String url, Map payload) {
+    byte[] encrypted = encryptMobilePayload(payload)
+    def requestParams = [
+        uri: url,
+        requestContentType: "application/octet-stream",
+        contentType: "application/octet-stream",
+        headers: [
+            "Accept": "application/octet-stream"
+        ],
+        body: encrypted,
+        timeout: 30
+    ]
+    try {
+        def result = [success: false, error: "No response"]
+        httpPost(requestParams) { resp ->
+            if (resp.status == 200) {
+                def body = decryptMobileResponse(resp.data)
+                if (body?.resultCode && body.resultCode != "200") {
+                    result = [success: false, error: "resultCode ${body.resultCode}: ${body.resultMessage}"]
+                } else {
+                    result = [success: true, data: body]
+                }
+            } else {
+                def body = decryptMobileResponse(resp.data)
+                def code = body?.resultCode ?: "unknown"
+                def msg = body?.resultMessage ?: "HTTP ${resp.status}"
+                result = [success: false, error: "${code}: ${msg}"]
+            }
+        }
+        return result
+    } catch (Exception e) {
+        return [success: false, error: e.message ?: "Mobile API error"]
+    }
+}
+
+byte[] encryptMobilePayload(Map payload) {
+    String json = groovy.json.JsonOutput.toJson(payload)
+    Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5Padding")
+    cipher.init(Cipher.ENCRYPT_MODE,
+        new SecretKeySpec(hexToBytes(MOBILE_AES_KEY_HEX), "AES"),
+        new IvParameterSpec(hexToBytes(MOBILE_AES_IV_HEX)))
+    return cipher.doFinal(json.getBytes("UTF-8"))
+}
+
+Map decryptMobileResponse(def data) {
+    if (!data) return null
+    byte[] bytes = (data instanceof byte[]) ? data : data.toString().getBytes("ISO-8859-1")
+    if (bytes.length == 0) return null
+    try {
+        Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5Padding")
+        cipher.init(Cipher.DECRYPT_MODE,
+            new SecretKeySpec(hexToBytes(MOBILE_AES_KEY_HEX), "AES"),
+            new IvParameterSpec(hexToBytes(MOBILE_AES_IV_HEX)))
+        String decrypted = new String(cipher.doFinal(bytes), "UTF-8")
+        return new groovy.json.JsonSlurper().parseText(decrypted)
+    } catch (Exception e) {
+        logDebug "Could not decrypt mobile response: ${e.message}"
+        return null
+    }
+}
+
+String parseCognitoError(groovyx.net.http.HttpResponseException e) {
+    try {
+        def resp = e.response
+        if (resp?.data != null) {
+            String errorText = resp.data.toString()
+            if (errorText?.contains("__type")) {
+                def errorJson = new groovy.json.JsonSlurper().parseText(errorText)
+                return (errorJson?.__type ?: "Error") + ": " + (errorJson?.message ?: errorText)
+            }
+            return errorText
+        }
+    } catch (Exception ignored) {}
+    return "HTTP error: " + e.getStatusCode()
+}
+
+String getIdentityId() {
+    return state.identityId
+}
+
 // ==================== Device Discovery & Management ====================
 
 def discoverDevices() {
     logDebug "Discovering devices"
-    
+    state.discoverMessage = null
+
     if (!state.accessToken) {
+        state.discoverMessage = "<span style='color:red'>Not authenticated. Log in on the main page first.</span>"
         log.error "Not authenticated"
         return
     }
-    
-    // Ensure token is fresh
+
     if (state.tokenExpiry && now() > state.tokenExpiry - 60000) {
-        refreshAuthToken()
+        if (!refreshAuthToken()) {
+            state.discoverMessage = "<span style='color:red'>Session expired. Please log in again.</span>"
+            return
+        }
     }
-    
+
     try {
         def devices = getWinixDevices()
+        state.discoveredDevices = devices ?: []
         if (devices) {
-            state.discoveredDevices = devices
-            logDebug "Discovered ${devices.size()} devices"
+            state.discoverMessage = "<span style='color:green'>Found ${devices.size()} purifier(s). Toggle to add or remove.</span>"
+            log.info "Discovered ${devices.size()} Winix device(s)"
         } else {
+            state.discoverMessage = "<span style='color:orange'>No purifiers found on this account.</span>"
             log.warn "No devices found"
-            state.discoveredDevices = []
         }
     } catch (Exception e) {
+        state.discoverMessage = "<span style='color:red'>Discovery failed: ${userFriendlyError(e.message)}</span>"
         log.error "Device discovery failed: ${e.message}"
     }
 }
@@ -912,133 +1096,87 @@ def refreshAllDevices() {
 
 def getWinixDevices() {
     logDebug "Getting device list from Winix API"
-    
-    // Generate UUID from userId using CRC32
-    String deviceUuid = generateWinixUuid(state.userId)
-    logDebug "Generated Winix UUID: ${deviceUuid}"
-    
-    // Store for later use
-    state.winixUuid = deviceUuid
-    
-    // Step 1: Register user with Winix API
-    if (!registerWinixUser(deviceUuid)) {
-        log.error "Failed to register user with Winix API"
-        return []
+
+    if (!state.winixUuid && state.userId) {
+        state.winixUuid = generateWinixUuid(state.userId)
     }
-    
-    // Step 2: Check access token
-    if (!checkWinixAccessToken(deviceUuid)) {
-        log.error "Failed to validate access token with Winix API"
-        return []
-    }
-    
-    // Step 3: Get device list
-    def bodyContent = [
-        accessToken: state.accessToken,
-        uuid: deviceUuid
-    ]
-    
-    def params = [
-        uri: "https://us.mobile.winix-iot.com/getDeviceInfoList",
-        requestContentType: "application/json",
-        contentType: "application/json",
-        body: groovy.json.JsonOutput.toJson(bodyContent),
-        timeout: 30
-    ]
-    
-    try {
-        def devices = []
-        
-        httpPost(params) { resp ->
-            logDebug "Device list response status: ${resp.status}"
-            
-            if (resp.status == 200 && resp.data?.deviceInfoList) {
-                resp.data.deviceInfoList.each { deviceData ->
-                    devices << [
-                        deviceId: deviceData.deviceId,
-                        deviceAlias: deviceData.deviceAlias ?: deviceData.deviceId,
-                        modelName: deviceData.modelName ?: "Winix Purifier",
-                        mcuVer: deviceData.mcuVer
-                    ]
-                }
-            }
+
+    if (!state.identityId) {
+        if (!establishWinixSession()) {
+            log.error "Failed to establish Winix session before device list"
+            return []
         }
-        
-        return devices
-    } catch (Exception e) {
-        log.error "Failed to get devices: ${e.message}"
+    }
+
+    def response = mobilePost("${MOBILE_API_BASE}/getDeviceInfoList", [
+        accessToken: state.accessToken,
+        uuid: state.winixUuid
+    ])
+
+    if (!response.success) {
+        log.error "Failed to get devices: ${response.error}"
         return []
     }
+
+    def devices = []
+    response.data?.deviceInfoList?.each { deviceData ->
+        devices << [
+            deviceId: deviceData.deviceId,
+            deviceAlias: deviceData.deviceAlias ?: deviceData.deviceId,
+            modelName: deviceData.modelName ?: "Winix Purifier",
+            mcuVer: deviceData.mcuVer
+        ]
+    }
+    return devices
 }
 
-def registerWinixUser(String uuid) {
+def registerWinixUser() {
     logDebug "Registering user with Winix API"
-    
-    def bodyContent = [
-        cognitoClientSecretKey: COGNITO_CLIENT_SECRET,
+    def response = mobilePost("${MOBILE_API_BASE}/registerUser", [
+        identityId: state.identityId,
         accessToken: state.accessToken,
-        uuid: uuid,
+        uuid: state.winixUuid,
         email: state.username,
         osType: "android",
         osVersion: "29",
-        mobileLang: "en"
-    ]
-    
-    def params = [
-        uri: "https://us.mobile.winix-iot.com/registerUser",
-        requestContentType: "application/json",
-        contentType: "application/json",
-        body: groovy.json.JsonOutput.toJson(bodyContent),
-        timeout: 30
-    ]
-    
-    try {
-        def success = false
-        httpPost(params) { resp ->
-            logDebug "Register user response status: ${resp.status}"
-            if (resp.status == 200) {
-                success = true
-            }
-        }
-        return success
-    } catch (Exception e) {
-        log.error "Failed to register user: ${e.message}"
-        return false
+        mobileLang: "en",
+        appVersion: MOBILE_APP_VERSION,
+        mobileModel: MOBILE_MODEL
+    ])
+    if (!response.success) {
+        log.error "Failed to register user: ${response.error}"
     }
+    return response.success
 }
 
-def checkWinixAccessToken(String uuid) {
-    logDebug "Checking access token with Winix API"
-    
-    def bodyContent = [
-        cognitoClientSecretKey: COGNITO_CLIENT_SECRET,
+def initWinixSession() {
+    logDebug "Winix mobile init"
+    def response = mobilePost("${MOBILE_API_BASE}/init", [
         accessToken: state.accessToken,
-        uuid: uuid,
-        osVersion: "29",
-        mobileLang: "en"
-    ]
-    
-    def params = [
-        uri: "https://us.mobile.winix-iot.com/checkAccessToken",
-        requestContentType: "application/json",
-        contentType: "application/json",
-        body: groovy.json.JsonOutput.toJson(bodyContent),
-        timeout: 30
-    ]
-    
-    try {
-        def success = false
-        httpPost(params) { resp ->
-            logDebug "Check access token response status: ${resp.status}"
-            if (resp.status == 200) {
-                success = true
-            }
-        }
-        return success
-    } catch (Exception e) {
-        log.error "Failed to check access token: ${e.message}"
-        return false
+        uuid: state.winixUuid,
+        region: "US"
+    ])
+    if (!response.success) {
+        log.error "Winix init failed: ${response.error}"
     }
+    return response.success
+}
+
+def checkWinixAccessToken() {
+    logDebug "Checking access token with Winix API"
+    def response = mobilePost("${MOBILE_API_BASE}/checkAccessToken", [
+        identityId: state.identityId,
+        accessToken: state.accessToken,
+        uuid: state.winixUuid,
+        osVersion: "29",
+        mobileLang: "en",
+        appVersion: MOBILE_APP_VERSION,
+        mobileModel: MOBILE_MODEL
+    ])
+    if (!response.success) {
+        log.error "Failed to check access token: ${response.error}"
+    }
+    return response.success
 }
 
 // Generate Winix UUID: CRC32('github.com/regaw-leinad/winix-api' + userid) + CRC32('HGF' + userid)
@@ -1113,6 +1251,35 @@ def apiGet(String path, Map query = [:]) {
         log.error "API request failed: ${e.message}"
         return null
     }
+}
+
+// ==================== App helpers ====================
+
+def getSetting(String name) {
+    return settings?."${name}"
+}
+
+String trimToken(String token) {
+    if (!token) return ""
+    return token.trim().replaceAll(/\s+/, "")
+}
+
+String maskEmail(String email) {
+    if (!email || !email.contains("@")) return "account"
+    def parts = email.split("@", 2)
+    def local = parts[0]
+    def masked = local.length() <= 2 ? "**" : "${local.take(2)}***"
+    return "${masked}@${parts[1]}"
+}
+
+String userFriendlyError(String message) {
+    if (!message) return "An unknown error occurred"
+    if (message.contains("NotAuthorizedException")) return "Invalid email or password"
+    if (message.contains("UserNotFoundException")) return "No Winix account found for this email"
+    if (message.contains("PasswordResetRequiredException")) return "Password reset required — update your password in the Winix app first"
+    if (message.contains("TooManyRequestsException")) return "Too many attempts — wait a few minutes and try again"
+    if (message.contains("CronExpression")) return "Invalid refresh schedule — use 60 minutes (hourly) or another supported interval"
+    return message.length() > 200 ? message.take(200) + "..." : message
 }
 
 // ==================== Logging ====================

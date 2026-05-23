@@ -8,6 +8,8 @@
  *
  *  THIS SOFTWARE IS PROVIDED "AS IS", WITHOUT ANY WARRANTY. THE AUTHORS ARE NOT LIABLE FOR ANY DAMAGES ARISING FROM ITS USE.
  *
+ *  v1.1.1 05-23-26   Control path uses Cognito identityId from parent app
+ *
  */
 
 import groovy.transform.Field
@@ -738,8 +740,14 @@ def setDeviceAttribute(String attribute, String value) {
     
     logDebug "Setting ${attribute} to ${value} for device ${deviceId}"
     
-    // The Winix API uses GET requests for control commands
-    def path = "/common/control/devices/${deviceId}/A211/${attribute}:${value}"
+    def identityId = parent?.getIdentityId()
+    if (!identityId) {
+        log.error "Missing Cognito identity id - re-authenticate in the Winix app"
+        return false
+    }
+
+    // Winix API uses GET requests for control (identityId from Cognito Identity Pool)
+    def path = "/common/control/devices/${deviceId}/${identityId}/${attribute}:${value}"
     def result = parent?.apiGet(path)
     
     // Check for success - API returns "success" or "control success"

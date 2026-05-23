@@ -1,12 +1,12 @@
 {
 	"packageName": "Winix Air Purifiers",
 	"author": "rbyrbt",
-	"version": "1.1.0",
+	"version": "1.1.1",
 	"minimumHEVersion": "2.1.9",
-	"dateReleased": "2026-03-07",
+	"dateReleased": "2026-05-23",
 	"documentationLink": "https://github.com/rbyrbt/Hubitat/blob/main/WinixAirPurifiers/README.md",
 	"payPalUrl": "https://ko-fi.com/rbyrbt",
-	"releaseNotes": "Initial HPM release.",
+	"releaseNotes": "Fix login and session handling for winix-api 2.0 / Homebridge 2.2.6 (Cognito client, encrypted mobile API, identity pool). UI polish, hourly refresh scheduling fix, token trimming, identityId device control. Re-authenticate after updating from older releases.",
 	"tags": ["Climate Control", "Temperature & Humidity", "Cloud"],
 	"apps": [
 		{
