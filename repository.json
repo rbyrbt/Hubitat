@@ -4,6 +4,13 @@
   "payPalUrl": "https://ko-fi.com/rbyrbt",
   "packages": [
     {
+      "name": "Lennox iComfort",
+      "category": "Integrations",
+      "location": "https://raw.githubusercontent.com/rbyrbt/Hubitat/main/LennoxiComfort/packageManifest.json",
+      "description": "Manage Lennox iComfort S30/E30/S40/M30 thermostats",
+      "tags": [ "Climate Control", "Temperature & Humidity", "Cloud", "LAN" ]
+    },
+    {
       "name": "PetSafe Smart Feeder",
       "category": "Integrations",
       "location": "https://raw.githubusercontent.com/rbyrbt/Hubitat/main/PetSafeSmartFeeder/packageManifest.json",
