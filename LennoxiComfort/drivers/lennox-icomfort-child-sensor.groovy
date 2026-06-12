@@ -20,6 +20,8 @@
  *
  *  THIS SOFTWARE IS PROVIDED "AS IS", WITHOUT ANY WARRANTY. THE AUTHORS ARE NOT LIABLE FOR ANY DAMAGES ARISING FROM ITS USE.
  *
+ *  v1.1.6  Round pass-through temperatures; compare string representations so cached excessive decimals are corrected. (credit: TX-RX)
+ *
  */
 
 import groovy.transform.Field
@@ -128,12 +130,14 @@ void refresh() {
 // Update methods called by parent for different sensor types
 
 void updateTemperature(BigDecimal tempF, BigDecimal tempC) {
-    def temp = getTemperatureScale() == "C" ? tempC : tempF
-    if (temp != null && device.currentValue("temperature") != temp) {
-        sendEvent(name: "temperature", value: temp, unit: getTemperatureScale(), 
-                  descriptionText: "${device.displayName} temperature is ${temp}°${getTemperatureScale()}")
-        sendEvent(name: "sensorValue", value: "${temp}°${getTemperatureScale()}")
-    }
+    def raw = getTemperatureScale() == "C" ? tempC : tempF
+    def temp = raw != null ? raw.setScale(getTemperatureScale() == "C" ? 1 : 0, BigDecimal.ROUND_HALF_UP) : null
+    if (temp == null) return
+    def current = device.currentValue("temperature")
+    if (current != null && current.toString() == temp.toString()) return
+    sendEvent(name: "temperature", value: temp, unit: getTemperatureScale(), 
+              descriptionText: "${device.displayName} temperature is ${temp}°${getTemperatureScale()}")
+    sendEvent(name: "sensorValue", value: "${temp}°${getTemperatureScale()}")
 }
 
 void updateHumidity(Integer humidity) {

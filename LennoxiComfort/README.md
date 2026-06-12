@@ -222,6 +222,8 @@ If you find this helpful, feel free to drop a tip [https://ko-fi.com/rbyrbt](htt
 
 This integration is a Hubitat adaptation of the Home Assistant [lennoxs30](https://github.com/PeteRager/lennoxs30) custom component and [lennoxs30api](https://github.com/PeteRager/lennoxs30api) Python library by [PeteRager](https://github.com/PeteRager).
 
+[v1.1.6](https://github.com/rbyrbt/Hubitat/releases) temperature decimal fix: [TX-RX](https://github.com/TX-RX) ([PR #1](https://github.com/TX-RX/rbyrbt-Hubitat/pull/1)).
+
 ## License
 
 Licensed under the MIT License.
