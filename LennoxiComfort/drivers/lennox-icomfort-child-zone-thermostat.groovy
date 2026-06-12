@@ -119,7 +119,7 @@ void refresh() {
 // Only send event when value changed to avoid "Too many events pending" when message pump floods updates
 private void sendEventIfChanged(String name, value, String unit = null, String descriptionText = null) {
     def current = device.currentValue(name)
-    boolean same = (current == value) || (value != null && current != null && valuesEqualAsNumber(current, value))
+    boolean same = (current == value) || (value != null && current != null && valuesEqualAsNumber(current, value) && current.toString() == value.toString())
     if (same) return
     Map evt = [name: name, value: value]
     if (unit) evt.unit = unit
@@ -509,10 +509,10 @@ private static Boolean valuesEqualAsNumber(def a, def b) {
 
 def convertTemp(tempF, tempC) {
     if (getTemperatureScale() == "C") {
-        if (tempC != null) return new BigDecimal(tempC.toString())
+        if (tempC != null) return new BigDecimal(tempC.toString()).setScale(1, BigDecimal.ROUND_HALF_UP)
         return tempF != null ? fahrenheitToCelsius(new BigDecimal(tempF.toString())) : null
     }
-    if (tempF != null) return new BigDecimal(tempF.toString())
+    if (tempF != null) return new BigDecimal(tempF.toString()).setScale(0, BigDecimal.ROUND_HALF_UP)
     return tempC != null ? celsiusToFahrenheit(new BigDecimal(tempC.toString())) : null
 }
 

@@ -2692,9 +2692,10 @@ List cloudPollOptions() {
 // Utility methods
 def convertTemperature(tempF, tempC) {
     if (getTemperatureScale() == "C") {
-        return tempC ?: fahrenheitToCelsius(tempF)
+        if (tempC != null) return new BigDecimal(tempC.toString()).setScale(1, BigDecimal.ROUND_HALF_UP)
+        return fahrenheitToCelsius(tempF)
     }
-    return tempF
+    return tempF != null ? new BigDecimal(tempF.toString()).setScale(0, BigDecimal.ROUND_HALF_UP) : null
 }
 
 BigDecimal fahrenheitToCelsius(BigDecimal f) {
@@ -2712,13 +2713,26 @@ String sanitizeAppId(String appId) {
     return appId.replaceAll('[^a-zA-Z0-9_]', '')
 }
 
-void sendEventIfChanged(String name, value, String unit = null, String descriptionText = null) {
-    if (device.currentValue(name) != value) {
-        Map evt = [name: name, value: value]
-        if (unit) evt.unit = unit
-        if (descriptionText) evt.descriptionText = descriptionText
-        sendEvent(evt)
+private static Boolean valuesEqualAsNumber(def a, def b) {
+    if (a == null && b == null) return true
+    if (a == null || b == null) return false
+    try {
+        BigDecimal na = new BigDecimal(a.toString())
+        BigDecimal nb = new BigDecimal(b.toString())
+        return na.compareTo(nb) == 0
+    } catch (Exception e) {
+        return a == b
     }
+}
+
+void sendEventIfChanged(String name, value, String unit = null, String descriptionText = null) {
+    def current = device.currentValue(name)
+    boolean same = (current == value) || (value != null && current != null && valuesEqualAsNumber(current, value) && current.toString() == value.toString())
+    if (same) return
+    Map evt = [name: name, value: value]
+    if (unit) evt.unit = unit
+    if (descriptionText) evt.descriptionText = descriptionText
+    sendEvent(evt)
 }
 
 void removeChildDevices() {
