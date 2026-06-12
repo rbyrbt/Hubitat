@@ -9,7 +9,7 @@
  *  THIS SOFTWARE IS PROVIDED "AS IS", WITHOUT ANY WARRANTY. THE AUTHORS ARE NOT LIABLE FOR ANY DAMAGES ARISING FROM ITS USE.
  *
  *  v1.1.3  Schedule preset attribute and setSchedulePreset command (WIP).
- *  v1.1.6  Round pass-through temperatures; fix sendEventIfChanged so formatted values replace cached excessive decimals.
+ *  v1.1.6  Round pass-through temperatures; fix sendEventIfChanged so formatted values replace cached excessive decimals. (credit: TX-RX)
  *
  */
 

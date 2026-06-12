@@ -7,7 +7,7 @@
 	"documentationLink": "https://github.com/rbyrbt/Hubitat/blob/main/LennoxiComfort/README.md",
 	"payPalUrl": "https://ko-fi.com/rbyrbt",
 	"communityLink": "https://community.hubitat.com/t/release-lennox-icomfort-s30/162305",
-	"releaseNotes": "v1.1.6: fix temperature displaying excessive decimal places (e.g. 21.5000000000000000°C).",
+	"releaseNotes": "v1.1.6: fix temperature displaying excessive decimal places (e.g. 21.5000000000000000°C). Thanks to TX-RX (https://github.com/TX-RX/rbyrbt-Hubitat/pull/1).",
 	"tags": ["Climate Control", "Temperature & Humidity", "Cloud", "LAN"],
 	"apps": [
 		{

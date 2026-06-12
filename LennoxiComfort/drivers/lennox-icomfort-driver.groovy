@@ -13,7 +13,7 @@
  *  v1.1.3  Cloud: stop requesting full schedules to reduce Retrieve payload. Zone schedule preset dropdown (No Schedule, Schedule IQ, Save Energy, Heat Only, Cool Only, Schedule)—work in progress.
  *  v1.1.4  Local LAN reliability fixes: lean discovery/dynamic RequestData paths, stale-queue mitigation for Retrieve StartTime, and setpoint command compatibility improvements.
  *  v1.1.5  Treat 408/400 as session timeout for both local and cloud; reconnect after 2 consecutive failures; clear message batch on every 408/400. Avoid huge message batch: never use StartTime=1 (epoch); clear queue and set cursor at connect/configureFromApp; reject Retrieve responses >100k chars.
- *  v1.1.6  Round pass-through temperatures; fix sendEventIfChanged so formatted values replace cached excessive decimals.
+ *  v1.1.6  Round pass-through temperatures; fix sendEventIfChanged so formatted values replace cached excessive decimals. (credit: TX-RX)
  */
 
 import groovy.json.JsonSlurper
