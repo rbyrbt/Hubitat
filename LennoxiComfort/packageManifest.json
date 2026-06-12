@@ -1,13 +1,13 @@
 {
 	"packageName": "Lennox iComfort",
 	"author": "rbyrbt",
-	"version": "1.1.5",
+	"version": "1.1.6",
 	"minimumHEVersion": "2.1.9",
-	"dateReleased": "2026-03-14",
+	"dateReleased": "2026-06-11",
 	"documentationLink": "https://github.com/rbyrbt/Hubitat/blob/main/LennoxiComfort/README.md",
 	"payPalUrl": "https://ko-fi.com/rbyrbt",
 	"communityLink": "https://community.hubitat.com/t/release-lennox-icomfort-s30/162305",
-	"releaseNotes": "v1.1.5: session timeout reconnection (local and cloud) to avoid huge message batch on new or reinstall.",
+	"releaseNotes": "v1.1.6: fix temperature displaying excessive decimal places (e.g. 21.5000000000000000°C).",
 	"tags": ["Climate Control", "Temperature & Humidity", "Cloud", "LAN"],
 	"apps": [
 		{

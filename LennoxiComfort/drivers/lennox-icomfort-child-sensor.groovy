@@ -20,6 +20,8 @@
  *
  *  THIS SOFTWARE IS PROVIDED "AS IS", WITHOUT ANY WARRANTY. THE AUTHORS ARE NOT LIABLE FOR ANY DAMAGES ARISING FROM ITS USE.
  *
+ *  v1.1.6  Round pass-through temperatures; compare string representations so cached excessive decimals are corrected.
+ *
  */
 
 import groovy.transform.Field
